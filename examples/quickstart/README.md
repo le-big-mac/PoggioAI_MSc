@@ -11,12 +11,12 @@ The task asks consortium to:
 4. Propose a minimal experiment design
 5. Write a 4-page paper draft in Markdown
 
-It is designed to be **cheap, fast, and self-contained** — no LaTeX installation, no GPU, no web crawl needed.
+It is designed to be **fast and self-contained** — no LaTeX installation, no GPU, no web crawl needed.
 
 ## Prerequisites
 
 - Python environment set up (`./scripts/bootstrap.sh researchlab minimal`)
-- At least one API key in `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_API_KEY`)
+- At least one CLI agent tool installed (`claude`, `codex`, or `gemini`) — verify with `which claude`
 
 ## Running It
 
@@ -36,11 +36,13 @@ python launch_multiagent.py \
 
 ## Expected Cost & Time
 
-| Model | Estimated Cost | Estimated Time |
-|---|---|---|
-| claude-opus-4-6 (default) | $3–8 | 20–35 min |
-| gpt-5 | $4–10 | 25–45 min |
-| claude-sonnet-4-6 | $1–4 | 15–25 min |
+All LLM costs are **included in your CLI tool subscription** (Claude Max, ChatGPT Pro, Gemini Advanced, etc.) — no per-token charges.
+
+| CLI Tool | Estimated Time |
+|---|---|
+| claude (default) | 20–35 min |
+| codex | 25–45 min |
+| gemini | 15–25 min |
 
 ## Expected Outputs
 
@@ -53,8 +55,8 @@ results/consortium_<timestamp>/
 │   ├── literature_review.pdf   ← Synthesized literature review
 │   ├── research_plan.pdf       ← Research plan
 │   └── references.bib          ← ArXiv citations
-├── run_summary.json            ← Cost/token summary
-└── budget_state.json           ← Detailed cost breakdown
+├── run_summary.json            ← Invocation and timing summary
+└── cli_budget_state.json       ← Invocation and wall-clock tracking
 ```
 
 The `final_paper.md` should contain:
@@ -75,7 +77,7 @@ The `expected_outputs/` directory contains annotated samples showing what typica
 - `final_paper.md` is 1,500–4,000 words
 - Literature review cites real ArXiv papers (check the DOIs/URLs)
 - Research plan mentions concrete experimental steps
-- `budget_state.json` shows cost below $15
+- `cli_budget_state.json` shows invocations completed normally
 
 **Signs something went wrong:**
 - `final_paper.md` is very short (<500 words) → the pipeline may have hit the budget cap or stalled

@@ -13,35 +13,17 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.research_plan_writeup_instructions import get_research_plan_writeup_system_prompt
-from ..toolkits.writeup.latex_generator_tool import LaTeXGeneratorTool
-from ..toolkits.writeup.latex_reflection_tool import LaTeXReflectionTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
 from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
-from ..toolkits.writeup.vlm_document_analysis_tool import VLMDocumentAnalysisTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent, DeleteFileOrFolder, ListDir, ModifyFile, SearchKeyword, SeeFile,
-)
 
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
-        LaTeXGeneratorTool(model=model_id, working_dir=workspace_dir),
-        LaTeXReflectionTool(model=model_id, working_dir=workspace_dir),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
         LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
-        VLMDocumentAnalysisTool(model=model_id, working_dir=workspace_dir),
         CitationSearchTool(),
     ]
-    if workspace_dir:
-        tools += [
-            SeeFile(working_dir=workspace_dir),
-            CreateFileWithContent(working_dir=workspace_dir),
-            ModifyFile(working_dir=workspace_dir),
-            ListDir(working_dir=workspace_dir),
-            SearchKeyword(working_dir=workspace_dir),
-            DeleteFileOrFolder(working_dir=workspace_dir),
-        ]
     return tools
 
 

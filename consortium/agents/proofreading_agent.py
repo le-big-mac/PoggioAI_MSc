@@ -8,21 +8,9 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.proofreading_instructions import get_proofreading_system_prompt
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent,
-    DeleteFileOrFolder,
-    ListDir,
-    ModifyFile,
-    SearchKeyword,
-    SeeFile,
-)
 from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 from ..toolkits.writeup.latex_content_verification_tool import LaTeXContentVerificationTool
-from ..toolkits.writeup.latex_generator_tool import LaTeXGeneratorTool
-from ..toolkits.writeup.latex_reflection_tool import LaTeXReflectionTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
-from ..toolkits.writeup.vlm_document_analysis_tool import VLMDocumentAnalysisTool
-from ..toolkits.code_execution_tool import PythonCodeExecutionTool
 
 
 def get_tools(
@@ -31,21 +19,10 @@ def get_tools(
     authorized_imports: Optional[List[str]] = None,
 ) -> list:
     tools = [
-        LaTeXGeneratorTool(model=model_id, working_dir=workspace_dir),
         LaTeXCompilerTool(working_dir=workspace_dir, model=model_id),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
         LaTeXContentVerificationTool(working_dir=workspace_dir),
-        LaTeXReflectionTool(model=model_id, working_dir=workspace_dir),
-        VLMDocumentAnalysisTool(working_dir=workspace_dir, model=model_id),
-        SeeFile(working_dir=workspace_dir),
-        ModifyFile(working_dir=workspace_dir),
-        ListDir(working_dir=workspace_dir),
-        SearchKeyword(working_dir=workspace_dir),
-        CreateFileWithContent(working_dir=workspace_dir),
-        DeleteFileOrFolder(working_dir=workspace_dir),
     ]
-    if workspace_dir:
-        tools.append(PythonCodeExecutionTool(workspace_dir=workspace_dir, authorized_imports=authorized_imports or []))
     return tools
 
 

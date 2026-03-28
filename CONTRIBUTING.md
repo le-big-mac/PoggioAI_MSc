@@ -1,6 +1,6 @@
 # Contributing to consortium
 
-This guide explains how to extend consortium: adding new agents, new tools, modifying prompts, updating model support, and running tests.
+This guide explains how to extend consortium: adding new agents, new tools, modifying prompts, updating CLI backend support, and running tests.
 
 ---
 
@@ -11,7 +11,7 @@ This guide explains how to extend consortium: adding new agents, new tools, modi
 - [Adding a New Specialist Agent](#adding-a-new-specialist-agent)
 - [Adding a New Tool to an Existing Toolkit](#adding-a-new-tool-to-an-existing-toolkit)
 - [Modifying Agent Prompts](#modifying-agent-prompts)
-- [Adding Model Support](#adding-model-support)
+- [Adding CLI Backend Support](#adding-cli-backend-support)
 - [Code Style](#code-style)
 
 ---
@@ -22,7 +22,8 @@ This guide explains how to extend consortium: adding new agents, new tools, modi
 ./scripts/bootstrap.sh researchlab minimal
 conda activate researchlab
 pip install -e . pytest pytest-cov mypy
-cp .env.example .env  # add at least one API key
+# Verify at least one CLI agent tool is installed
+which claude || which codex || which gemini
 ```
 
 Verify everything is working:
@@ -47,7 +48,7 @@ pytest tests/test_budget.py -v
 pytest tests/ --cov=consortium --cov-report=term-missing
 ```
 
-Tests use `unittest.mock` to mock LLM calls — no real API calls are made.
+Tests use `unittest.mock` to mock CLI agent subprocess calls — no real CLI invocations are made.
 
 ---
 
@@ -215,21 +216,25 @@ All agent system prompts live in `consortium/prompts/`:
 
 ---
 
-## Adding Model Support
+## Adding CLI Backend Support
 
-### Step 1: Add the model ID to `utils.py`
+To add support for a new CLI agent tool (e.g., a new LLM provider's CLI):
 
-In `consortium/utils.py`, add to the appropriate provider list in `AVAILABLE_MODELS`:
+### Step 1: Add a `CLIBackendSpec` entry
+
+In `consortium/cli_completion.py` (or the CLI backend registry), register the new backend via `create_cli_backend_registry()`:
 
 ```python
-AVAILABLE_MODELS = [
-    # OpenAI
-    "gpt-5", "my-new-gpt-model", ...
-    # Anthropic
-    "claude-opus-4-6", ...
-    # Google
-    "gemini-2.5-pro", ...
-]
+# Add a new CLIBackendSpec for the provider
+CLI_BACKENDS = {
+    ...
+    "my-new-cli": CLIBackendSpec(
+        binary="my-new-cli",           # CLI executable name
+        model_flag="--model",          # flag to specify model
+        prompt_flag="--prompt",        # flag to pass prompt text
+        default_model="my-model-v1",   # default model identifier
+    ),
+}
 ```
 
 ### Step 2: Add context limit to `base_agent.py`
@@ -245,28 +250,22 @@ MODEL_CONTEXT_LIMITS = {
 
 ### Step 3: Add parameter filtering if needed
 
-If the new model has non-standard API parameters, add a branch in `consortium/config.py`'s `filter_model_params()`.
+If the new CLI tool has non-standard flags, add a branch in `consortium/config.py`'s `filter_model_params()`.
 
-### Step 4: Add API key mapping to `runner.py`
+### Step 4: Add CLI tool validation to `runner.py`
 
-In `consortium/runner.py`'s `_MODEL_KEY_MAP`:
+In `consortium/runner.py`'s CLI tool validation, add a check for the new binary:
 
 ```python
-_MODEL_KEY_MAP = {
+_CLI_TOOL_MAP = {
     ...
-    "my-provider-prefix": "MY_PROVIDER_API_KEY",
+    "my-provider-prefix": "my-new-cli",  # maps model prefix to CLI binary name
 }
 ```
 
-### Step 5: Add pricing to `.llm_config.yaml`
+### Step 5: Verify the tool is available
 
-```yaml
-budget:
-  pricing:
-    my-new-model:
-      input_per_1k: 0.005
-      output_per_1k: 0.015
-```
+The new CLI tool must be installed and on PATH. No API keys are needed — CLI tools authenticate through their own subscriptions (e.g., Claude Max, ChatGPT Pro, Gemini Advanced).
 
 ---
 
@@ -274,6 +273,6 @@ budget:
 
 - **Type hints**: Add type annotations to all new public functions
 - **Docstrings**: Add docstrings to agent `build_node()` functions and tool classes
-- **No real API calls in tests**: Mock all LLM calls with `unittest.mock.patch`
+- **No real CLI calls in tests**: Mock all CLI agent subprocess calls with `unittest.mock.patch`
 - **Imports**: Standard library → third-party → local (relative imports for intra-package)
 - **Configuration**: New runtime options go in `args.py` (CLI) + `config.py` (YAML) with CLI overriding YAML

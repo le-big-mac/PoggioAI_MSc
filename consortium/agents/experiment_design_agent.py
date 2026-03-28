@@ -10,10 +10,6 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.experiment_design_instructions import get_experiment_design_system_prompt
-from ..toolkits.code_execution_tool import PythonCodeExecutionTool
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent, DeleteFileOrFolder, ListDir, ModifyFile, SearchKeyword, SeeFile,
-)
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
 
@@ -26,19 +22,6 @@ def get_tools(
         PaperSearchTool(),
         CitationSearchTool(),
     ]
-    if workspace_dir:
-        tools += [
-            SeeFile(working_dir=workspace_dir),
-            CreateFileWithContent(working_dir=workspace_dir),
-            ModifyFile(working_dir=workspace_dir),
-            ListDir(working_dir=workspace_dir),
-            SearchKeyword(working_dir=workspace_dir),
-            DeleteFileOrFolder(working_dir=workspace_dir),
-            PythonCodeExecutionTool(
-                workspace_dir=workspace_dir,
-                authorized_imports=authorized_imports or [],
-            ),
-        ]
     return tools
 
 

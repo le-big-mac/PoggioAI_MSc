@@ -204,3 +204,53 @@ def build_system_prompt(tools, instructions, workspace_guidance, managed_agents=
         INSTRUCTIONS_SECTION=instructions,
         WORKSPACE_SECTION=workspace_guidance
     )
+
+
+# ---------------------------------------------------------------------------
+# CLI agent prompt adaptation
+# ---------------------------------------------------------------------------
+
+# Specialized tools that CLI agents don't have natively.
+# Listed as shell commands the CLI agent can invoke.
+_CLI_TOOL_COMMANDS = {
+    "arxiv_search": "python -m consortium.toolkits.search.fetch_arxiv_papers.cli_entry --query '<query>' --max-results 10",
+    "latex_compile": "python -m consortium.toolkits.writeup.latex_compiler_cli --workspace .",
+    "claim_graph": "python -m consortium.toolkits.math.claim_graph_cli --workspace .",
+    "proof_rigor_check": "python -m consortium.toolkits.math.proof_rigor_cli --workspace .",
+    "paper_search": "python -m consortium.toolkits.search.paper_search_cli --query '<query>'",
+}
+
+
+def adapt_prompt_for_cli(instructions: str, workspace_dir: str, agent_name: str) -> str:
+    """Build a CLI-agent-ready system prompt from the domain instructions.
+
+    Strips the ReAct code-blob format and tool-signature boilerplate, keeping
+    only the domain-specific instructions. Prepends CLI-agent context about
+    workspace location and available specialized shell commands.
+
+    This is used by ``create_cli_agent`` instead of ``build_system_prompt``.
+    """
+    tool_lines = "\n".join(
+        f"  {name}: {cmd}" for name, cmd in _CLI_TOOL_COMMANDS.items()
+    )
+
+    return f"""You are "{agent_name}" — a specialist agent in a multi-agent math research pipeline.
+
+## Environment
+- Your working directory is the research workspace: {workspace_dir}
+- Files from previous pipeline stages are already present — read them to understand context.
+- Write all your output files to the workspace or its subdirectories.
+- You have full access to the filesystem, shell, and Python within this workspace.
+
+## Specialized Research Tools
+These are available as shell commands for domain-specific tasks that go beyond
+standard file I/O and code execution:
+{tool_lines}
+
+## Your Mission
+{instructions}
+
+## Output Protocol
+- Create all required files in the workspace.
+- When done, summarize what you accomplished and list key files you created/modified.
+"""

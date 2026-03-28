@@ -24,9 +24,10 @@ import os
 import re
 from typing import Dict, Any, List, Optional, Type
 
-import litellm
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, ConfigDict
+
+from ...cli_completion import cli_completion
 
 
 class LaTeXGeneratorToolInput(BaseModel):
@@ -238,11 +239,7 @@ class LaTeXGeneratorTool(BaseTool):
         user_prompt = self._build_section_prompt(section_type, content_description)
 
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
-        response = litellm.completion(
-            model=self.model_id,
-            messages=[{"role": "user", "content": full_prompt}],
-        )
-        output = response.choices[0].message.content
+        output = cli_completion(full_prompt)
 
         return self._clean_latex_output(output)
 

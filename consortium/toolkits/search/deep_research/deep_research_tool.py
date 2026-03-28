@@ -5,7 +5,7 @@ Uses deep-research APIs (Perplexity sonar-deep-research or OpenAI reasoning mode
 to search across academic papers, MathOverflow, theses, and web sources for prior
 proofs of specific mathematical claims.
 
-All API calls go through litellm.completion() for budget tracking consistency.
+LLM calls go through cli_completion() for budget tracking consistency.
 """
 
 from __future__ import annotations
@@ -15,9 +15,10 @@ import os
 import re
 from typing import Any, Optional, Type
 
-import litellm
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
+
+from ....cli_completion import cli_completion
 
 
 class DeepResearchNoveltyScanInput(BaseModel):
@@ -103,15 +104,7 @@ class DeepResearchNoveltyScanTool(BaseTool):
             user_prompt += f"\n\nCONTEXT:\n{context}"
 
         try:
-            resp = litellm.completion(
-                model=model_id,
-                messages=[
-                    {"role": "system", "content": _NOVELTY_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                max_tokens=4096,
-            )
-            finding = resp.choices[0].message.content or ""
+            finding = cli_completion(user_prompt, system_prompt=_NOVELTY_SYSTEM_PROMPT)
         except Exception as e:
             # Graceful degradation — never break the agent
             print(

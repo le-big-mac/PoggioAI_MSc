@@ -6,7 +6,7 @@ and produces a CampaignPlan specifying how many theory/experiment stages are nee
 their dependency ordering, task prompts, and artifact requirements.
 
 The debate follows the same pattern as consortium/counsel.py but simplified: all phases
-use litellm.completion() directly (no ReAct agents/tools needed since planning is pure
+use cli_completion() directly (no ReAct agents/tools needed since planning is pure
 reasoning, not tool-using).
 """
 
@@ -19,9 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-import litellm
-
-from consortium.utils import normalize_model_for_litellm
+from ..cli_completion import cli_completion
 
 from .planner_prompt import (
     CAMPAIGN_PLANNING_SYSTEM_PROMPT,
@@ -295,6 +293,13 @@ def generate_task_files(plan: CampaignPlan, task_dir: str) -> Dict[str, str]:
 # Planning counsel runner
 # ---------------------------------------------------------------------------
 
+def _model_to_backend(model_id: str) -> str:
+    if "claude" in model_id or "anthropic" in model_id: return "claude"
+    if "gpt" in model_id or model_id.startswith(("o1-","o3-","o4-")): return "codex"
+    if "gemini" in model_id: return "gemini"
+    return "claude"
+
+
 def run_campaign_planning_counsel(
     research_plan_text: str,
     track_decomposition: Optional[dict] = None,
@@ -306,7 +311,7 @@ def run_campaign_planning_counsel(
     """Run multi-model counsel to produce a campaign plan.
 
     Follows the same debate pattern as counsel.py but simplified:
-    all phases use litellm.completion() directly (no tools needed).
+    all phases use cli_completion() directly (no tools needed).
 
     1. Proposal phase — each model independently proposes a campaign structure
     2. Debate phase   — models critique each other's proposals
@@ -349,20 +354,12 @@ def run_campaign_planning_counsel(
 
     def _one_proposal(i: int) -> tuple:
         spec = specs[i]
-        extra_params = {k: v for k, v in spec.items() if k != "model"}
-        if "effort" in extra_params:
-            extra_params.setdefault("reasoning_effort", extra_params.pop("effort"))
         try:
-            resp = litellm.completion(
-                model=normalize_model_for_litellm(spec["model"]),
-                messages=[
-                    {"role": "system", "content": CAMPAIGN_PLANNING_SYSTEM_PROMPT},
-                    {"role": "user", "content": task},
-                ],
-                max_tokens=8192,
-                **extra_params,
-            )
-            output = resp.choices[0].message.content or ""
+            output = cli_completion(
+                task,
+                system_prompt=CAMPAIGN_PLANNING_SYSTEM_PROMPT,
+                backend=_model_to_backend(spec["model"]),
+            ) or ""
         except Exception as e:
             output = f"[{spec['model']} failed: {e}]"
         print(f"[planner] model_{i} ({spec['model']}) proposal complete.")
@@ -413,17 +410,11 @@ def run_campaign_planning_counsel(
 
         def _one_critique(i: int) -> tuple:
             spec = specs[i]
-            extra_params = {k: v for k, v in spec.items() if k != "model"}
-            if "effort" in extra_params:
-                extra_params.setdefault("reasoning_effort", extra_params.pop("effort"))
             try:
-                resp = litellm.completion(
-                    model=normalize_model_for_litellm(spec["model"]),
-                    messages=[{"role": "user", "content": base_prompt}],
-                    max_tokens=4096,
-                    **extra_params,
-                )
-                critique = resp.choices[0].message.content or ""
+                critique = cli_completion(
+                    base_prompt,
+                    backend=_model_to_backend(spec["model"]),
+                ) or ""
             except Exception as e:
                 critique = f"[{spec['model']} debate error: {e}]"
             return i, f"Model {i} ({spec['model']}):\n{critique}"
@@ -462,40 +453,23 @@ def run_campaign_planning_counsel(
         "Output ONLY valid JSON, no other text."
     )
 
-    # Find synthesis model params
-    synth_params = {}
-    for sp in specs:
-        if sp["model"] == _SYNTHESIS_MODEL:
-            synth_params = {k: v for k, v in sp.items() if k != "model"}
-            if "effort" in synth_params:
-                synth_params.setdefault("reasoning_effort", synth_params.pop("effort"))
-            break
-
     # Retry loop for synthesis (JSON parsing may fail)
     max_retries = 3
     last_error = None
     for attempt in range(max_retries):
         try:
-            msgs = [
-                {"role": "system", "content": CAMPAIGN_PLANNING_SYSTEM_PROMPT},
-                {"role": "user", "content": synthesis_prompt},
-            ]
+            user_prompt = synthesis_prompt
             if attempt > 0 and last_error:
-                msgs.append({
-                    "role": "user",
-                    "content": (
-                        f"Your previous output had errors: {last_error}\n"
-                        "Please fix and output valid JSON only."
-                    ),
-                })
+                user_prompt += (
+                    f"\n\nYour previous output had errors: {last_error}\n"
+                    "Please fix and output valid JSON only."
+                )
 
-            resp = litellm.completion(
-                model=normalize_model_for_litellm(_SYNTHESIS_MODEL),
-                messages=msgs,
-                max_tokens=8192,
-                **synth_params,
-            )
-            raw_output = resp.choices[0].message.content or ""
+            raw_output = cli_completion(
+                user_prompt,
+                system_prompt=CAMPAIGN_PLANNING_SYSTEM_PROMPT,
+                backend=_model_to_backend(_SYNTHESIS_MODEL),
+            ) or ""
 
             # Parse JSON
             plan_dict = _parse_plan_json(raw_output)

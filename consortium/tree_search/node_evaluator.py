@@ -10,8 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
-import litellm
-
+from consortium.cli_completion import cli_completion
 from consortium.tree_search.tree_state import NodeStatus, TreeNode, TreeSearchState
 
 
@@ -57,16 +56,11 @@ def _llm_promise_score(
         user += f"\n\nPrior verification gaps:\n{json.dumps(node.metadata['prior_gaps'], indent=2)}"
 
     try:
-        response = litellm.completion(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            temperature=0.0,
-            max_tokens=256,
-        )
-        raw = response.choices[0].message.content.strip()
+        raw = cli_completion(
+            user,
+            system_prompt=system,
+            backend="claude",
+        ).strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1]
             if raw.endswith("```"):

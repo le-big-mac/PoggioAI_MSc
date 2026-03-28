@@ -1,8 +1,7 @@
 """Configuration dataclasses for build_research_graph_v2.
 
-Bundles the 27+ parameters into a serializable config object,
-following the same pattern as ``TreeSearchConfig`` in
-``consortium.tree_search.tree_state``.
+Bundles graph-construction parameters into a serializable config object.
+CLI-agent-only branch: agents run via local CLI tools, not API calls.
 """
 
 from __future__ import annotations
@@ -100,7 +99,7 @@ class DualityCheckConfig:
 
 # Fields that hold runtime objects and cannot roundtrip through JSON.
 _RUNTIME_FIELDS = frozenset(
-    {"model", "checkpointer", "counsel_models", "budget_manager", "model_registry"}
+    {"cli_backend_registry", "checkpointer"}
 )
 
 
@@ -108,14 +107,13 @@ _RUNTIME_FIELDS = frozenset(
 class ResearchGraphConfig:
     """All knobs for ``build_research_graph_v2``.
 
-    Serializable fields survive a ``to_dict()`` → ``from_dict()`` roundtrip
-    so that run configurations can be persisted as JSON for reproducibility.
-    Runtime objects (model handles, checkpointers, …) are excluded from
-    serialization and must be supplied separately via ``from_dict()``.
+    CLI-agent-only: agents run via local CLI tools (Claude Code, Codex,
+    Gemini CLI) as subprocesses.  The ``cli_backend_registry`` maps agent
+    names to CLI backend specs.
     """
 
     # -- required ----------------------------------------------------------
-    model: Any = field(repr=False)
+    cli_backend_registry: Any = field(repr=False)
     workspace_dir: str = ""
 
     # -- pipeline flags ----------------------------------------------------
@@ -137,9 +135,6 @@ class ResearchGraphConfig:
 
     # -- runtime objects (excluded from serialization) ---------------------
     checkpointer: Any = field(default=None, repr=False)
-    counsel_models: Optional[List[Any]] = field(default=None, repr=False)
-    budget_manager: Any = field(default=None, repr=False)
-    model_registry: Any = field(default=None, repr=False)
 
     # -- composed sub-configs ----------------------------------------------
     tree_search: Any = None  # Optional[TreeSearchConfig]
@@ -181,11 +176,8 @@ class ResearchGraphConfig:
         cls,
         data: Dict[str, Any],
         *,
-        model: Any = None,
+        cli_backend_registry: Any = None,
         checkpointer: Any = None,
-        counsel_models: Optional[List[Any]] = None,
-        budget_manager: Any = None,
-        model_registry: Any = None,
     ) -> "ResearchGraphConfig":
         """Reconstruct from a serialized dict plus runtime objects."""
         tree_data = data.get("tree_search")
@@ -196,7 +188,7 @@ class ResearchGraphConfig:
             tree_cfg = TreeSearchConfig.from_dict(tree_data)
 
         return cls(
-            model=model,
+            cli_backend_registry=cli_backend_registry,
             workspace_dir=data.get("workspace_dir", ""),
             pipeline_mode=data.get("pipeline_mode", "default"),
             enable_math_agents=data.get("enable_math_agents", False),
@@ -208,9 +200,6 @@ class ResearchGraphConfig:
             authorized_imports=data.get("authorized_imports"),
             summary_model_id=data.get("summary_model_id", "claude-sonnet-4-6"),
             checkpointer=checkpointer,
-            counsel_models=counsel_models,
-            budget_manager=budget_manager,
-            model_registry=model_registry,
             tree_search=tree_cfg,
             persona_council=PersonaCouncilConfig.from_dict(
                 data.get("persona_council", {})

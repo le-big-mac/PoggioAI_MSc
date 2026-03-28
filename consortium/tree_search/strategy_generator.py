@@ -13,7 +13,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
-import litellm
+from ..cli_completion import cli_completion
 
 
 @dataclass
@@ -119,17 +119,11 @@ def generate_proof_strategies(
 
     user_msg = "\n\n".join(user_parts)
 
-    response = litellm.completion(
-        model=model,
-        messages=[
-            {"role": "system", "content": _PROOF_STRATEGY_SYSTEM.format(n=n)},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=0.8,  # encourage diversity
-        max_tokens=4096,
-    )
-
-    raw = response.choices[0].message.content.strip()
+    raw = cli_completion(
+        user_msg,
+        system_prompt=_PROOF_STRATEGY_SYSTEM.format(n=n),
+        backend="claude",
+    ).strip()
     # Strip markdown fences if present
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1]

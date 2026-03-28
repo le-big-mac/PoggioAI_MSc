@@ -140,13 +140,15 @@ Respond in this exact JSON format (no markdown fences):
 """
 
     try:
-        import litellm
-        resp = litellm.completion(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=4096,
-        )
-        raw = resp.choices[0].message.content or ""
+        from ..cli_completion import cli_completion
+
+        def _model_to_backend(mid: str) -> str:
+            if "claude" in mid or "anthropic" in mid: return "claude"
+            if "gpt" in mid or mid.startswith(("o1-","o3-","o4-")): return "codex"
+            if "gemini" in mid: return "gemini"
+            return "claude"
+
+        raw = cli_completion(prompt, backend=_model_to_backend(model)) or ""
 
         # Strip markdown fences if present
         import re

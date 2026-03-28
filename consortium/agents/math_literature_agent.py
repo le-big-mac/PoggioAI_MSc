@@ -13,12 +13,8 @@ from ..prompts.math_literature_instructions import get_math_literature_system_pr
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.search.fetch_arxiv_papers.fetch_arxiv_papers_tools import FetchArxivPapersTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
-from ..toolkits.writeup.vlm_document_analysis_tool import VLMDocumentAnalysisTool
 from ..toolkits.math.claim_graph_tool import MathClaimGraphTool
 from ..toolkits.math.proof_workspace_tool import MathProofWorkspaceTool
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent, DeleteFileOrFolder, ListDir, ModifyFile, SearchKeyword, SeeFile,
-)
 
 try:
     from ..toolkits.search.open_deep_search.ods_tool import OpenDeepSearchTool
@@ -32,21 +28,11 @@ def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
         PaperSearchTool(),
         FetchArxivPapersTool(working_dir=workspace_dir),
         CitationSearchTool(),
-        VLMDocumentAnalysisTool(model=model_id, working_dir=workspace_dir),
         MathClaimGraphTool(working_dir=workspace_dir),
         MathProofWorkspaceTool(working_dir=workspace_dir),
     ]
     if OpenDeepSearchTool is not None:
         tools.insert(2, OpenDeepSearchTool(model_name=model_id))
-    if workspace_dir:
-        tools += [
-            SeeFile(working_dir=workspace_dir),
-            CreateFileWithContent(working_dir=workspace_dir),
-            ModifyFile(working_dir=workspace_dir),
-            ListDir(working_dir=workspace_dir),
-            SearchKeyword(working_dir=workspace_dir),
-            DeleteFileOrFolder(working_dir=workspace_dir),
-        ]
     return tools
 
 

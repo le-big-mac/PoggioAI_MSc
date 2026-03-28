@@ -195,7 +195,7 @@ def _format_output_as_latex(
     model_id: str,
 ) -> str:
     """Use an LLM to convert the agent's text/markdown output to LaTeX body content."""
-    import litellm
+    from consortium.cli_completion import cli_completion
 
     display_name = AGENT_DISPLAY_NAMES.get(agent_name, agent_name.replace("_", " ").title())
 
@@ -240,12 +240,13 @@ AGENT OUTPUT TO FORMAT:
                   "``\\textit{{(Output truncated — see full pipeline state for complete text.)}}''"
 
     try:
-        resp = litellm.completion(
-            model=model_id,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=16384,
-        )
-        content = resp.choices[0].message.content or ""
+        def _model_to_backend(mid: str) -> str:
+            if "claude" in mid or "anthropic" in mid: return "claude"
+            if "gpt" in mid or mid.startswith(("o1-","o3-","o4-")): return "codex"
+            if "gemini" in mid: return "gemini"
+            return "claude"
+
+        content = cli_completion(prompt, backend=_model_to_backend(model_id)) or ""
         # Strip any accidental code fences the model may have added
         content = content.strip()
         content = re.sub(r"^```(?:latex)?\s*", "", content)

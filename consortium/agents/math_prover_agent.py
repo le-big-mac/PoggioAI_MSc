@@ -14,9 +14,6 @@ from ..toolkits.math.claim_graph_tool import MathClaimGraphTool
 from ..toolkits.math.proof_workspace_tool import MathProofWorkspaceTool
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent, DeleteFileOrFolder, ListDir, ModifyFile, SearchKeyword, SeeFile,
-)
 
 
 def get_tools(workspace_dir: Optional[str]) -> list:
@@ -26,15 +23,6 @@ def get_tools(workspace_dir: Optional[str]) -> list:
         PaperSearchTool(),
         CitationSearchTool(),
     ]
-    if workspace_dir:
-        tools += [
-            SeeFile(working_dir=workspace_dir),
-            CreateFileWithContent(working_dir=workspace_dir),
-            ModifyFile(working_dir=workspace_dir),
-            ListDir(working_dir=workspace_dir),
-            SearchKeyword(working_dir=workspace_dir),
-            DeleteFileOrFolder(working_dir=workspace_dir),
-        ]
     return tools
 
 

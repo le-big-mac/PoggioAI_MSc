@@ -1,21 +1,19 @@
 """
 Model utilities for tools.
 
-After the LangGraph migration, the agent-level model is a ChatLiteLLM instance.
-Tools that need to make direct LLM calls use litellm.completion() with a model_id
-string extracted from whatever model object is passed in.
+Extracts a model identifier string from whatever model object is passed in.
+Tools that previously used litellm.completion() now delegate to
+cli_completion() for LLM calls; this helper is still used to unwrap
+model wrappers into a plain string identifier.
 """
 
 
 def get_raw_model(model):
     """
-    Extract a model identifier string (or a raw callable) from whatever
-    model object is passed.
+    Extract a model identifier string from whatever model object is passed.
 
-    Receives a langchain ChatLiteLLM and returns the model_id
-    string so tool internals can call litellm.completion(model=...) directly.
-
-    Handles BudgetedLiteLLMModel wrappers by unwrapping one level.
+    Unwraps ChatLiteLLM and BudgetedLiteLLMModel wrappers to return a plain
+    model_id string that tools can use for identification and logging.
 
     Args:
         model: ChatLiteLLM instance, BudgetedLiteLLMModel, a string model_id, or None.

@@ -122,21 +122,15 @@ def _preflight_api_check() -> bool:
     Returns True if OK, False if the API is unreachable or credits are exhausted.
     Cost: ~$0.001 per call.
     """
-    try:
-        import litellm
-        resp = litellm.completion(
-            model="claude-haiku-4-5-20251001",
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-        )
-        return True
-    except Exception as exc:
-        err_str = str(exc).lower()
-        if "credit" in err_str or "balance" in err_str or "limit" in err_str:
-            print(f"[heartbeat] API credit check failed: {exc}")
-        else:
-            print(f"[heartbeat] API pre-flight check error: {exc}")
-        return False
+    import subprocess as _sp
+    for cli_tool in ["claude", "codex", "gemini"]:
+        try:
+            _sp.run([cli_tool, "--version"], capture_output=True, timeout=10)
+            return True
+        except (FileNotFoundError, _sp.TimeoutExpired):
+            continue
+    print("[heartbeat] No CLI agent tool (claude/codex/gemini) found on PATH")
+    return False
 
 
 def _check_campaign_wall_time(spec, status, campaign_dir: str) -> bool:

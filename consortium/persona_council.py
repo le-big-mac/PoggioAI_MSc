@@ -28,8 +28,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import litellm
-
+from .cli_completion import cli_completion
 from .prompts.persona_instructions import (
     PERSONA_POST_SYNTHESIS_VOTE_PROMPT,
     PERSONA_SYSTEM_PROMPTS,
@@ -65,6 +64,17 @@ _FALSE_POSITIVE_PATTERNS = [
     r"NOT ACCEPT",
     r"REFUSE TO ACCEPT",
 ]
+
+
+def _model_to_backend(model_id: str) -> str:
+    """Map a model identifier to a cli_completion backend name."""
+    m = model_id.lower()
+    if m.startswith("gpt-") or m.startswith("o3-") or m.startswith("o4-"):
+        return "codex"
+    if m.startswith("gemini-"):
+        return "gemini"
+    # Default covers "claude-*", "anthropic*", and anything else
+    return "claude"
 
 
 # ---------------------------------------------------------------------------
@@ -133,8 +143,7 @@ def _parse_json_response(text: str) -> Optional[dict]:
     return None
 
 
-## _record_budget removed — budget is now recorded automatically by the
-# monkey-patched litellm.completion() in config.py.
+## _record_budget removed — LLM calls now go through cli_completion().
 
 
 # ---------------------------------------------------------------------------
@@ -192,17 +201,11 @@ def run_persona_council(
 
         system_prompt = PERSONA_SYSTEM_PROMPTS.get(persona_name, "")
         try:
-            resp = litellm.completion(
-                model=model_id,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": task},
-                ],
-                max_tokens=4096,
-                **extra_params,
-            )
-            output = resp.choices[0].message.content or ""
-            # Budget recorded automatically via litellm.completion monkey-patch
+            output = cli_completion(
+                task,
+                system_prompt=system_prompt,
+                backend=_model_to_backend(model_id),
+            ) or ""
         except Exception as e:
             output = f"[{persona_name} error: {e}]"
         print(f"[persona_council] Phase 1 — {persona_name} evaluation complete.")
@@ -271,17 +274,11 @@ def run_persona_council(
             extra_params = {k: v for k, v in spec.items() if k not in ("persona", "model")}
             system_prompt = PERSONA_SYSTEM_PROMPTS.get(persona_name, "")
             try:
-                resp = litellm.completion(
-                    model=model_id,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": debate_prompt},
-                    ],
-                    max_tokens=3072,
-                    **extra_params,
-                )
-                critique = resp.choices[0].message.content or ""
-                # Budget recorded automatically via litellm.completion monkey-patch
+                critique = cli_completion(
+                    debate_prompt,
+                    system_prompt=system_prompt,
+                    backend=_model_to_backend(model_id),
+                ) or ""
             except Exception as e:
                 critique = f"[{persona_name} error: {e}]"
             return i, f"{persona_name}:\n{critique}"
@@ -339,19 +336,12 @@ def run_persona_council(
         f"Debate ({len(debate_history)} rounds):\n" + "\n---\n".join(debate_history)
     )
 
-    _synthesis_extra = {"reasoning_effort": "high"} if any(p in synthesis_model for p in ("claude", "gpt")) else {}
     try:
-        resp = litellm.completion(
-            model=synthesis_model,
-            messages=[
-                {"role": "system", "content": PERSONA_SYNTHESIS_PROMPT},
-                {"role": "user", "content": synthesis_input},
-            ],
-            max_tokens=8192,
-            **_synthesis_extra,
-        )
-        proposal_text = resp.choices[0].message.content or ""
-        # Budget recorded automatically via litellm.completion monkey-patch
+        proposal_text = cli_completion(
+            synthesis_input,
+            system_prompt=PERSONA_SYNTHESIS_PROMPT,
+            backend=_model_to_backend(synthesis_model),
+        ) or ""
     except Exception as e:
         print(f"[persona_council] Synthesis failed ({e}), using first evaluation as fallback.")
         proposal_text = evaluations[0] if evaluations else f"[synthesis error: {e}]"
@@ -375,16 +365,11 @@ def run_persona_council(
             f"SYNTHESIZED PROPOSAL:\n{proposal}"
         )
         try:
-            resp = litellm.completion(
-                model=model_id,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                max_tokens=1024,
-                **extra_params,
-            )
-            vote_text = resp.choices[0].message.content or ""
+            vote_text = cli_completion(
+                user_content,
+                system_prompt=system_prompt,
+                backend=_model_to_backend(model_id),
+            ) or ""
         except Exception as e:
             vote_text = f"[{persona_name} vote error: {e}]"
         vote_verdict = _extract_verdict(vote_text)
@@ -441,16 +426,11 @@ def run_persona_council(
             "You MUST address these objections in a revised proposal."
         )
         try:
-            resp = litellm.completion(
-                model=synthesis_model,
-                messages=[
-                    {"role": "system", "content": PERSONA_SYNTHESIS_PROMPT},
-                    {"role": "user", "content": synthesis_input_retry},
-                ],
-                max_tokens=8192,
-                **_synthesis_extra,
-            )
-            proposal_text = resp.choices[0].message.content or ""
+            proposal_text = cli_completion(
+                synthesis_input_retry,
+                system_prompt=PERSONA_SYNTHESIS_PROMPT,
+                backend=_model_to_backend(synthesis_model),
+            ) or ""
             print("[persona_council] Phase 4 — re-synthesis complete after post-vote rejection.")
         except Exception as e:
             print(f"[persona_council] Re-synthesis failed ({e}), keeping original proposal.")
@@ -535,19 +515,13 @@ def run_duality_check(
     # ------------------------------------------------------------------
     default_fail = {"passed": False, "reasoning": "Check did not complete.", "score": 0, "suggestions": []}
 
-    _check_extra = {"reasoning_effort": "high"} if any(p in check_model for p in ("claude", "gpt")) else {}
-
     def _run_check(prompt_template: str, check_label: str) -> Tuple[str, dict]:
         user_content = f"{prompt_template}\n\n--- WORKSPACE ARTIFACTS ---\n\n{workspace_context}"
         try:
-            resp = litellm.completion(
-                model=check_model,
-                messages=[{"role": "user", "content": user_content}],
-                max_tokens=4096,
-                **_check_extra,
-            )
-            raw = resp.choices[0].message.content or ""
-            # Budget recorded automatically via litellm.completion monkey-patch
+            raw = cli_completion(
+                user_content,
+                backend=_model_to_backend(check_model),
+            ) or ""
 
             parsed = _parse_json_response(raw)
             if parsed is None:

@@ -4,7 +4,7 @@
 
 - Access to a SLURM cluster
 - Conda installed (Miniconda or Miniforge)
-- API keys for at least one LLM provider (Anthropic, OpenAI, Google, etc.)
+- At least one CLI agent tool installed (`claude`, `codex`, or `gemini`)
 
 ## Quick Start
 
@@ -15,9 +15,10 @@ git clone <repo-url> OpenPI && cd OpenPI
 # 2. Bootstrap the environment (creates conda env + installs deps)
 ./scripts/bootstrap.sh consortium full
 
-# 3. Set up API keys
-cp .env.example .env
-# Edit .env with your API keys
+# 3. Verify CLI tools are available
+which claude || which codex || which gemini
+# No API keys needed — CLI tools authenticate via their own subscriptions
+# (Claude Max, ChatGPT Pro, Gemini Advanced, etc.)
 
 # 4. Configure cluster paths (if using SLURM)
 # Edit engaging_config.yaml with your cluster-specific paths:
@@ -38,7 +39,7 @@ Consortium uses a **two-tier execution model** on HPC clusters:
 
 ### Tier 1: Orchestrator (CPU)
 - Runs on a CPU partition (e.g., 12hr limit)
-- Makes outbound HTTPS calls to LLM APIs (Claude, GPT, Gemini)
+- Invokes CLI agent subprocesses (claude, codex, gemini) for LLM calls
 - Coordinates 23+ specialist agents via LangGraph
 - Does NOT need GPU
 
@@ -67,7 +68,7 @@ All cluster-specific settings are centralized here:
 LLM model selection, budget limits, counsel mode settings.
 
 ### .env
-API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
+Optional service keys (search tools, Tinker, notifications). CLI agent tools do not require API keys.
 
 ## Running a Campaign (Multi-Stage)
 
@@ -122,8 +123,8 @@ cat results/consortium_*/experiment_runs/*/slurm_logs/exp_*.out
 cat results/consortium_*/experiment_runs/*/slurm_logs/exp_*.err
 ```
 
-### API calls fail from compute node
-The orchestrator needs outbound internet access. If compute nodes don't have it, run the orchestrator on a login node instead:
+### CLI tool not found from compute node
+The orchestrator needs CLI agent tools (claude/codex/gemini) on PATH. If compute nodes have a different environment, ensure the tools are installed or run the orchestrator on a login node instead:
 ```bash
 conda activate <your-env>
 nohup python launch_multiagent.py --task "..." --no-counsel &

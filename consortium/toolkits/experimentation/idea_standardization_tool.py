@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import Optional, Type, Any
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, ConfigDict
-import litellm
 
 import json
 import logging
@@ -34,30 +33,13 @@ class IdeaStandardizationTool(BaseTool):
 
     def __init__(self, model=None, **kwargs: Any):
         """
-        Initialize IdeaStandardizationTool with raw LiteLLMModel.
+        Initialize IdeaStandardizationTool.
 
         Args:
-            model: LiteLLMModel instance (will extract raw model if LoggingLiteLLMModel wrapper)
+            model: Model identifier (unused; kept for API compatibility).
         """
         model_id = model if isinstance(model, str) else getattr(model, 'model', str(model)) if model else ""
         super().__init__(model_id=model_id, **kwargs)
-
-        self._configure_api_keys()
-
-    def _configure_api_keys(self):
-        """Configure API keys for litellm from environment variables."""
-        import os
-
-        # Set Google/Gemini API key if available
-        google_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GOOGLEAI_API_KEY')
-        if google_key:
-            litellm.api_key = google_key
-
-        # Set other API keys that might be needed
-        if os.getenv('OPENAI_API_KEY'):
-            litellm.openai_key = os.getenv('OPENAI_API_KEY')
-        if os.getenv('ANTHROPIC_API_KEY'):
-            litellm.anthropic_key = os.getenv('ANTHROPIC_API_KEY')
 
     def _run(self, idea_json: str) -> str:
         """
@@ -90,18 +72,10 @@ class IdeaStandardizationTool(BaseTool):
 
             logger.info(f"Converting research idea with keys: {list(idea_data.keys())}")
 
-            # Try LLM-based intelligent conversion
-            try:
-                standardized = self._llm_based_conversion(idea_data)
-                logger.info("LLM-based conversion successful")
-                return json.dumps([standardized])
-
-            except Exception as llm_error:
-                logger.warning(f"LLM conversion failed: {llm_error}, using rule-based fallback")
-                # Fallback to rule-based conversion
-                standardized = self._rule_based_conversion(idea_data)
-                logger.info("Rule-based fallback conversion completed")
-                return json.dumps([standardized])
+            # Rule-based conversion (no LLM dependency)
+            standardized = self._rule_based_conversion(idea_data)
+            logger.info("Rule-based conversion completed")
+            return json.dumps([standardized])
 
         except Exception as e:
             logger.error(f"Idea standardization failed: {e}")
@@ -136,91 +110,6 @@ class IdeaStandardizationTool(BaseTool):
             cleaned_lines.append(cleaned_line)
 
         return '\n'.join(cleaned_lines).strip()
-
-    def _llm_based_conversion(self, idea_data):
-        """Use LLM to intelligently convert research idea to AI-Scientist-v2 format."""
-
-        # Create flexible conversion prompt
-        prompt = self._create_conversion_prompt(idea_data)
-
-        # Call LLM via litellm
-        if not self.model_id:
-            raise Exception("No LLM model available for conversion")
-
-        messages = [{"role": "user", "content": prompt}]
-        response = litellm.completion(model=self.model_id, messages=messages)
-        response_text = response.choices[0].message.content
-
-        # Parse LLM response
-        try:
-            # Try to extract JSON from response - robust approach
-            import re
-
-            # First try: Look for ```json code blocks
-            json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
-            if json_match:
-                json_content = json_match.group(1).strip()
-                standardized = json.loads(json_content)
-            else:
-                # Second try: Look for standalone JSON objects
-                json_match = re.search(r'(\{.*\})', response_text, re.DOTALL)
-                if json_match:
-                    json_content = json_match.group(1).strip()
-                    standardized = json.loads(json_content)
-                else:
-                    # Third try: Parse entire response as JSON
-                    standardized = json.loads(response_text.strip())
-
-            # Validate required fields
-            self._validate_ai_scientist_format(standardized)
-            return standardized
-
-        except (json.JSONDecodeError, KeyError) as e:
-            raise Exception(f"LLM response parsing failed: {e}")
-
-    def _create_conversion_prompt(self, idea_data):
-        """Create flexible conversion prompt for LLM."""
-
-        prompt = f"""Convert this research idea to the AI-Scientist-v2 format. Keep as much information as possible from the original but fit it into the correct fields.
-
-Original Research Idea:
-{json.dumps(idea_data, indent=2)}
-
-Convert to this JSON structure:
-- Name: Create a short identifier from the title (lowercase, underscores, under 50 chars)
-- Title: Use the exact title from the original
-- Short Hypothesis: Extract the main research question or hypothesis
-- Abstract: Preserve the full technical description and methodology - include ALL important details
-- Experiments: List all experimental steps described in the original (include as many as needed)
-- Risk Factors and Limitations: Generate realistic limitations based on the research domain
-- Related Work: Provide brief context about related research
-
-Example of good conversion:
-```json
-{{
-    "Name": "self_distillation_anchoring",
-    "Title": "Self-Distillation Anchoring: Mitigating Catastrophic Forgetting in Small Language Models with a Functional Snapshot",
-    "Short Hypothesis": "Self-distillation using an anchor dataset can significantly reduce catastrophic forgetting while maintaining task performance",
-    "Abstract": "We propose Self-Distillation Anchoring (SDA), which creates a small anchor dataset capturing the pre-trained model's behavior and uses self-distillation loss during fine-tuning to preserve general capabilities...",
-    "Experiments": [
-        "Generate anchor dataset using pre-trained Pythia-410M on diverse prompts",
-        "Fine-tune baseline model on Alpaca dataset with standard SFT",
-        "Fine-tune SDA model on Alpaca with composite loss function",
-        "Evaluate both models on HellaSwag, ARC-Challenge, and MMLU benchmarks",
-        "Compare task performance using AlpacaEval"
-    ],
-    "Risk Factors and Limitations": [
-        "Anchor dataset quality affects regularization effectiveness",
-        "Lambda hyperparameter requires careful tuning",
-        "Method effectiveness may vary across model architectures"
-    ],
-    "Related Work": "This work builds upon continual learning and knowledge distillation research in language models."
-}}
-```
-
-Output ONLY the JSON, no explanations."""
-
-        return prompt
 
     def _rule_based_conversion(self, idea_data):
         """Fallback rule-based conversion when LLM fails."""

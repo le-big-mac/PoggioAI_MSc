@@ -40,7 +40,12 @@ ROOT = Path("knowledge_base")
 INDEX_DIR = Path("vector_store")
 INDEX_PATH = INDEX_DIR / "faiss.index"
 META_PATH = INDEX_DIR / "metadata.json"
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY_EMBEDDINGS"))
+# Embeddings client — only used if OPENAI_API_KEY_EMBEDDINGS is set.
+# In CLI-agent mode, agents use grep instead of semantic search.
+try:
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY_EMBEDDINGS"))
+except Exception:
+    client = None
 
 # ---------- helper: (mtime_ns, size) signature ----------
 

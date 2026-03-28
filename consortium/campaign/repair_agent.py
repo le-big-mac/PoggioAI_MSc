@@ -624,7 +624,7 @@ def _parse_repair_report(output: str) -> dict:
 
 
 # ------------------------------------------------------------------
-# OpenClaw plan review — LLM judge via litellm
+# OpenClaw plan review — LLM judge via cli_completion
 # ------------------------------------------------------------------
 
 @dataclass
@@ -646,13 +646,13 @@ def _review_plan(
     repair_config: RepairConfig,
 ) -> PlanReview:
     """
-    Have OpenClaw (via litellm) review the repair plan before execution.
+    Have OpenClaw (via cli_completion) review the repair plan before execution.
 
     Uses a separate LLM call (not Claude Code) to judge whether the plan
     is safe, correct, and likely to fix the issue. This is the gate between
     Phase 1 (plan) and Phase 2 (execute).
     """
-    import litellm
+    from ..cli_completion import cli_completion
 
     plan_text = plan["raw"] or f"Diagnosis: {plan['diagnosis']}\nSteps: {plan['steps']}"
 
@@ -693,14 +693,16 @@ APPROVED: <true|false>
 """
 
     try:
-        response = litellm.completion(
-            model=repair_config.review_model,
-            messages=[{"role": "user", "content": review_prompt}],
-            temperature=repair_config.review_temperature,
-            max_tokens=1000,
-            timeout=120,
-        )
-        review_text = response.choices[0].message.content or ""
+        def _model_to_backend(mid: str) -> str:
+            if "claude" in mid or "anthropic" in mid: return "claude"
+            if "gpt" in mid or mid.startswith(("o1-","o3-","o4-")): return "codex"
+            if "gemini" in mid: return "gemini"
+            return "claude"
+
+        review_text = cli_completion(
+            review_prompt,
+            backend=_model_to_backend(repair_config.review_model),
+        ) or ""
     except Exception as e:
         # If the review LLM fails, track consecutive failures.
         # After max_review_failures (default 3), reject instead of auto-approving
@@ -792,7 +794,7 @@ def attempt_repair(
 
     Two-phase flow (when repair.two_phase=True):
       Phase 1: Claude Code in plan mode (read-only) diagnoses and proposes a plan.
-      Review:  OpenClaw judges the plan via a litellm call.
+      Review:  OpenClaw judges the plan via a cli_completion call.
       Phase 2: If approved, Claude Code executes the plan with full edit access.
 
     Single-phase flow (when repair.two_phase=False):
@@ -935,7 +937,7 @@ def _attempt_repair_two_phase(
         )
 
     # ------------------------------------------------------------------
-    # REVIEW: OpenClaw judges the plan via litellm
+    # REVIEW: OpenClaw judges the plan via cli_completion
     # ------------------------------------------------------------------
     print(f"[repair:review] Reviewing plan with {repair_config.review_model}...")
 
@@ -1230,7 +1232,7 @@ cd "{repo_root}"
 
 # Run the full repair flow (plan→review→execute) via Python.
 # This calls attempt_repair() which handles both two-phase and single-phase
-# modes, plan review via litellm, and writes the sentinel file.
+# modes, plan review via cli_completion, and writes the sentinel file.
 python3 -c "
 import json, sys, time
 sys.path.insert(0, '.')

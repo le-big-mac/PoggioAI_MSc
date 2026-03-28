@@ -7,7 +7,7 @@ How to go from a research idea to an autonomous campaign producing a conference-
 | Requirement | How to verify |
 |------------|---------------|
 | Python environment | `conda activate <your-env> && python -c "import consortium"` |
-| API keys set in `.env` | At minimum `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) |
+| CLI agent tool installed | At minimum `which claude` (or `which codex` / `which gemini`) |
 | `pdflatex` on PATH | `which pdflatex` (install via `./scripts/bootstrap.sh <env> latex`) |
 | **Optional**: Telegram bot | `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` |
 | **Optional**: OpenClaw | `which openclaw` — only needed for Telegram-based monitoring |
@@ -158,7 +158,7 @@ Recommended: 900s for heartbeat, 180s for log monitor.
 ## Step 7: Monitor Progress
 
 ### Via Telegram (if configured)
-- **Every 15 min**: Heartbeat status (stages in progress, budget spent, artifacts found)
+- **Every 15 min**: Heartbeat status (stages in progress, invocations used, artifacts found)
 - **On stage complete**: Summary + artifacts
 - **On failure**: Error diagnosis + repair attempt status
 
@@ -174,7 +174,7 @@ python scripts/campaign_cli.py --campaign my_campaign.yaml stage-logs <stage_id>
 # Budget summary
 python scripts/campaign_cli.py --campaign my_campaign.yaml budget
 
-# Check API credits before launch
+# Check CLI tool availability before launch
 python scripts/campaign_cli.py --campaign my_campaign.yaml check-credits
 
 # Approve the dynamic plan (if human_review: true)
@@ -206,9 +206,9 @@ Exit codes from heartbeat:
 
 ## Budget
 
-Default: `$25` for exploration (configurable in `.llm_config.yaml`). Increase `budget.usd_limit` for production campaigns.
+All LLM costs are **included in your CLI tool subscription** (Claude Max, ChatGPT Pro, Gemini Advanced, etc.). Budget tracking monitors invocation counts and wall-clock time. Configure limits in `.llm_config.yaml`.
 
-Monitor spend:
+Monitor usage:
 ```bash
 python scripts/campaign_cli.py --campaign my_campaign.yaml budget
 ```
@@ -217,8 +217,8 @@ python scripts/campaign_cli.py --campaign my_campaign.yaml budget
 
 | Problem | Fix |
 |---------|-----|
-| Heartbeat shows $0 budget | Normal during early ticks — budget updates on stage completion |
-| API rate limit hit | Add fallback models in `.llm_config.yaml` |
+| Heartbeat shows 0 invocations | Normal during early ticks — budget updates on stage completion |
+| CLI tool rate limit hit | Add fallback CLI backends in `.llm_config.yaml` |
 | Stage died silently | Heartbeat detects + triggers repair agent (2 attempts max) |
 | Plan not approved | Run `campaign_cli.py approve-plan` or set `human_review: false` |
 | Hollow experiment artifacts | Agents lack GPU access — configure SLURM in `engaging_config.yaml` |
@@ -233,7 +233,7 @@ python scripts/campaign_cli.py --campaign my_campaign.yaml budget
 | `my_campaign.yaml` | Your campaign configuration |
 | `engaging_config.yaml` | HPC cluster settings (optional, SLURM only) |
 | `.llm_config.yaml` | Model configuration (main model, counsel models, budget) |
-| `.env` | API keys and notification credentials |
+| `.env` | Optional service keys and notification credentials |
 | `scripts/campaign_heartbeat.py` | Heartbeat orchestrator (called by cron) |
 | `scripts/campaign_cli.py` | CLI for status, launch, repair, approve-plan |
 | `scripts/launch_openclaw_gateway.sh` | SLURM launcher for OpenClaw gateway (HPC only) |

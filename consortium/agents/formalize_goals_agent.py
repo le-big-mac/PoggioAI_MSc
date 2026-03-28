@@ -8,13 +8,9 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.formalize_goals_instructions import get_formalize_goals_system_prompt
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent, DeleteFileOrFolder, ListDir, ModifyFile, SearchKeyword, SeeFile,
-)
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.search.fetch_arxiv_papers.fetch_arxiv_papers_tools import FetchArxivPapersTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
-from ..toolkits.code_execution_tool import PythonCodeExecutionTool
 
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
@@ -23,16 +19,6 @@ def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
         FetchArxivPapersTool(working_dir=workspace_dir),
         CitationSearchTool(),
     ]
-    if workspace_dir:
-        tools += [
-            SeeFile(working_dir=workspace_dir),
-            CreateFileWithContent(working_dir=workspace_dir),
-            ModifyFile(working_dir=workspace_dir),
-            ListDir(working_dir=workspace_dir),
-            SearchKeyword(working_dir=workspace_dir),
-            DeleteFileOrFolder(working_dir=workspace_dir),
-            PythonCodeExecutionTool(workspace_dir=workspace_dir, authorized_imports=[]),
-        ]
     return tools
 
 

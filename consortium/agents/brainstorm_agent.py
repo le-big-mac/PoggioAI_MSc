@@ -9,46 +9,19 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.brainstorm_instructions import get_brainstorm_system_prompt
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent, DeleteFileOrFolder, ListDir, ModifyFile, SearchKeyword, SeeFile,
-)
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.search.fetch_arxiv_papers.fetch_arxiv_papers_tools import FetchArxivPapersTool
 from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
-from ..toolkits.writeup.latex_generator_tool import LaTeXGeneratorTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
-from ..toolkits.writeup.vlm_document_analysis_tool import VLMDocumentAnalysisTool
-from ..toolkits.code_execution_tool import PythonCodeExecutionTool
-
-try:
-    from ..toolkits.search.deep_research.deep_research_tool import DeepResearchNoveltyScanTool
-except (ImportError, ModuleNotFoundError):
-    DeepResearchNoveltyScanTool = None
 
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
         PaperSearchTool(),
         FetchArxivPapersTool(working_dir=workspace_dir),
-    ]
-    if DeepResearchNoveltyScanTool is not None:
-        tools.append(DeepResearchNoveltyScanTool(model_name=model_id))
-    tools += [
-        VLMDocumentAnalysisTool(model=model_id, working_dir=workspace_dir),
-        LaTeXGeneratorTool(model=model_id, working_dir=workspace_dir),
         LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
     ]
-    if workspace_dir:
-        tools += [
-            SeeFile(working_dir=workspace_dir),
-            CreateFileWithContent(working_dir=workspace_dir),
-            ModifyFile(working_dir=workspace_dir),
-            ListDir(working_dir=workspace_dir),
-            SearchKeyword(working_dir=workspace_dir),
-            DeleteFileOrFolder(working_dir=workspace_dir),
-            PythonCodeExecutionTool(workspace_dir=workspace_dir, authorized_imports=[]),
-        ]
     return tools
 
 

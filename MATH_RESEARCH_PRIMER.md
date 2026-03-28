@@ -367,25 +367,28 @@ results/consortium_YYYYMMDD_HHMMSS/
 
 ### Model Selection (`.llm_config.yaml`)
 
-Currently configured for `gpt-5.2` with high reasoning effort. For math-heavy
-work, this is the recommended default. Alternatives:
+Currently configured to use Claude Code CLI (`claude`) as the default backend.
+For math-heavy work, `claude-opus-4-6` is recommended. Alternatives:
 
-- `claude-opus-4-20250514` -- strong at proofs, requires `ANTHROPIC_API_KEY`
-- `o3-pro-2025-06-10` -- OpenAI reasoning model, good for multi-step deduction
+- `codex` backend with `gpt-5.4` -- good for multi-step deduction
+- `gemini` backend with `gemini-3-pro-preview` -- large context for long proofs
 
 ### Budget (`.llm_config.yaml`)
 
-Math research with proofs is token-intensive. The current cap is $150 per run.
-For a full paper with proofs, consider raising to $200-300:
+Math research with proofs requires many CLI agent invocations. The default
+limits are 100 invocations and 4 hours of wall-clock time. For a full paper
+with proofs, consider raising:
 
 ```yaml
 budget:
-  usd_limit: 250
+  max_invocations: 200
+  max_wall_clock_seconds: 28800   # 8 hours
 ```
 
-### API Keys (`.env`)
+### CLI Tools
 
-Already configured. Supports OpenAI, Anthropic, Google, OpenRouter, DeepSeek.
+Requires at least one CLI agent tool installed: `claude`, `codex`, or `gemini`.
+No API keys needed — agents run locally via subscription plans.
 
 ---
 

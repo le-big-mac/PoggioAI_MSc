@@ -4,9 +4,10 @@ import json
 import os
 from typing import Any, Optional, Type
 
-import litellm
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
+
+from consortium.cli_completion import cli_completion
 
 from .paper_search_tool import _search_semantic_scholar
 
@@ -132,13 +133,8 @@ A query will work best if you are able to recall the exact name of the paper you
 This JSON will be automatically parsed, so ensure the format is precise.
 '''
 
-                # Get LLM response
-                messages = [
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": prompt}
-                ]
-                response = litellm.completion(model=self.model_id, messages=messages)
-                response_content = response.choices[0].message.content
+                # Get LLM response via cli_completion
+                response_content = cli_completion(prompt, system_prompt=system_msg)
 
                 # Extract JSON from response
                 if "```json" in response_content:

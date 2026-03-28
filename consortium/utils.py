@@ -1,41 +1,19 @@
-import json
+"""
+Utilities for CLI agent mode.
+
+Provides CLIBackendSpec, CLIBackendRegistry, and helper functions for
+routing agent nodes to local CLI tools (Claude Code, Codex, Gemini CLI).
+"""
+
 import logging
 import os
 import re
-from typing import Any, Optional
-from langchain_community.chat_models import ChatLiteLLM
-
-# Configure litellm retries globally for transient API errors
-import litellm as _litellm
-_litellm.num_retries = 3
-_litellm.request_timeout = 300  # 5 min timeout per request
+from dataclasses import dataclass
+from typing import Optional
 
 from .models import AVAILABLE_MODELS  # noqa: F401 — re-exported for backward compat
 
 logger = logging.getLogger(__name__)
-
-
-def normalize_model_for_litellm(model: str) -> str:
-    """Add provider prefix for direct litellm.completion() calls.
-
-    The LangChain ChatLiteLLM wrapper (create_model) already handles this,
-    but direct litellm.completion() calls need the prefix to route correctly.
-    Without ``gemini/``, litellm routes to Vertex AI (requires google.auth).
-    """
-    if "gemini" in model and not model.startswith("gemini/"):
-        return f"gemini/{model}"
-    return model
-
-
-def _require_env(key: str, model_name: str) -> str:
-    """Get a required environment variable or raise a descriptive error."""
-    value = os.environ.get(key)
-    if not value:
-        raise EnvironmentError(
-            f"API key '{key}' is required for model '{model_name}' but is not set. "
-            f"Add it to your .env file: {key}=your_key_here"
-        )
-    return value
 
 
 def extract_content_between_markers(response: str, start_marker: str, end_marker: str) -> Optional[str]:
@@ -53,201 +31,76 @@ def extract_content_between_markers(response: str, start_marker: str, end_marker
         return None
 
 
-def create_model(
-    model_name,
-    reasoning_effort="medium",
-    verbosity="medium",
-    budget_tokens=None,
-    budget_config=None,
-    budget_dir=None,
-    effort=None,
-):
-    """Create a ChatLiteLLM model from the given model name using API keys from environment.
-
-    Args:
-        model_name:       Name of the model to create
-        reasoning_effort: GPT-5 reasoning effort level (minimal, low, medium, high)
-        verbosity:        GPT-5 verbosity level (low, medium, high)
-        budget_tokens:    Claude Extended Thinking token budget (min: 1024)
-        effort:           Claude 4.x effort level (low, medium, high, max)
-    """
-    model_kwargs: dict = {}
-
-    if "claude" in model_name:
-        if budget_tokens is not None:
-            model_kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
-        if effort is not None and model_name in {"claude-opus-4-6", "claude-sonnet-4-6"}:
-            model_kwargs["reasoning_effort"] = effort
-
-        base_model = ChatLiteLLM(
-            model=f"anthropic/{model_name}",
-            api_key=_require_env("ANTHROPIC_API_KEY", model_name),
-            model_kwargs=model_kwargs if model_kwargs else None,
-        )
-
-    elif "codex" in model_name:
-        base_model = ChatLiteLLM(
-            model=model_name,
-            api_key=_require_env("OPENAI_API_KEY", model_name),
-            model_kwargs={"reasoning_effort": reasoning_effort},
-        )
-
-    elif model_name.startswith("gpt-5"):
-        base_model = ChatLiteLLM(
-            model=model_name,
-            api_key=_require_env("OPENAI_API_KEY", model_name),
-            model_kwargs={"reasoning_effort": reasoning_effort, "verbosity": verbosity},
-        )
-
-    elif "gpt" in model_name or model_name.startswith(("o1-", "o3-", "o4-")):
-        base_model = ChatLiteLLM(
-            model=model_name,
-            api_key=_require_env("OPENAI_API_KEY", model_name),
-        )
-
-    elif "deepseek" in model_name:
-        base_model = ChatLiteLLM(
-            model=model_name,
-            api_key=_require_env("DEEPSEEK_API_KEY", model_name),
-            api_base="https://api.deepseek.com",
-        )
-
-    elif "llama" in model_name:
-        base_model = ChatLiteLLM(
-            model=f"openrouter/{model_name}",
-            api_key=_require_env("OPENROUTER_API_KEY", model_name),
-        )
-
-    elif "gemini" in model_name:
-        if "gemini-3-pro" in model_name:
-            model_kwargs["thinking_budget"] = 65536
-        elif "gemini-2.5-pro" in model_name:
-            model_kwargs["thinking_budget"] = 32768
-        base_model = ChatLiteLLM(
-            model=f"gemini/{model_name}",
-            api_key=_require_env("GOOGLE_API_KEY", model_name),
-            model_kwargs=model_kwargs if model_kwargs else None,
-        )
-
-    elif "grok" in model_name:
-        base_model = ChatLiteLLM(
-            model=model_name,
-            api_key=os.environ.get("XAI_API_KEY", ""),
-        )
-
-    else:
-        base_model = ChatLiteLLM(
-            model=model_name,
-            api_key=os.environ.get("OPENAI_API_KEY", ""),
-        )
-
-    # Optional hard budget enforcement wrapper
-    if budget_config and budget_config.get("usd_limit"):
-        from .budget import BudgetManager, BudgetedLiteLLMModel
-        budget_dir = budget_dir or os.getcwd()
-        state_path = os.path.join(budget_dir, "budget_state.json")
-        ledger_path = os.path.join(budget_dir, "budget_ledger.jsonl")
-        lock_path = os.path.join(budget_dir, "budget.lock")
-
-        manager = BudgetManager(
-            usd_limit=float(budget_config["usd_limit"]),
-            pricing=budget_config.get("pricing", {}),
-            state_path=state_path,
-            ledger_path=ledger_path,
-            lock_path=lock_path,
-            hard_stop=bool(budget_config.get("hard_stop", True)),
-            fail_closed=bool(budget_config.get("fail_closed", True)),
-        )
-        # Register globally so the monkey-patched litellm.completion() can
-        # record budget without every callsite passing BudgetManager explicitly.
-        from .budget import set_global_budget_manager
-        set_global_budget_manager(manager)
-        return BudgetedLiteLLMModel(base_model, manager)
-
-    return base_model
-
-
-# ---------------------------------------------------------------------------
-# Per-agent model tiering
-# ---------------------------------------------------------------------------
-
-class ModelRegistry:
-    """Maps agent names to model instances with a default fallback.
-
-    Used by the graph builder to assign different models to different agents
-    based on the ``per_agent_models`` config section in ``.llm_config.yaml``.
-    """
-
-    def __init__(self, default_model: Any, agent_models: Optional[dict[str, Any]] = None):
-        self._default = default_model
-        self._agent_models = agent_models or {}
-
-    def get(self, agent_name: str) -> Any:
-        """Return the model for *agent_name*, falling back to the default."""
-        return self._agent_models.get(agent_name, self._default)
-
-    @property
-    def default_model(self) -> Any:
-        return self._default
-
-
-def create_model_registry(
-    llm_config: Optional[dict],
-    default_model: Any,
-    budget_config: Optional[dict] = None,
-    budget_dir: Optional[str] = None,
-) -> ModelRegistry:
-    """Build a :class:`ModelRegistry` from the ``per_agent_models`` config.
-
-    All tier models share the same :class:`BudgetManager` extracted from
-    *default_model* so that spend is tracked against a single ledger and
-    USD limit.  If ``per_agent_models.enabled`` is falsy the registry simply
-    wraps the default model and every agent gets the same instance.
-    """
-    cfg = (llm_config or {}).get("per_agent_models", {})
-    if not cfg.get("enabled"):
-        return ModelRegistry(default_model)
-
-    # Shared budget manager — all tier models record to the same ledger.
-    budget_manager = getattr(default_model, "_budget_manager", None)
-
-    tier_models: dict[str, Any] = {}
-    for tier_name, tier_spec in cfg.get("tiers", {}).items():
-        bare = create_model(
-            tier_spec["model"],
-            reasoning_effort=tier_spec.get("reasoning_effort", "medium"),
-            budget_tokens=tier_spec.get("budget_tokens"),
-            effort=tier_spec.get("effort"),
-            # Deliberately omit budget_config so create_model returns an
-            # unwrapped ChatLiteLLM.  We wrap with the *shared* manager below.
-        )
-        if budget_manager is not None:
-            from .budget import BudgetedLiteLLMModel
-            bare = BudgetedLiteLLMModel(bare, budget_manager)
-        tier_models[tier_name] = bare
-
-    # Map agent names → tier model instances.
-    agent_models: dict[str, Any] = {}
-    for agent_name, tier_name in cfg.get("agent_tiers", {}).items():
-        if tier_name in tier_models:
-            agent_models[agent_name] = tier_models[tier_name]
-        else:
-            logger.warning(
-                "per_agent_models.agent_tiers: unknown tier %r for agent %r — using default",
-                tier_name, agent_name,
-            )
-
-    tier_summary = {}
-    for agent_name, m in agent_models.items():
-        model_id = getattr(m, "model", "unknown")
-        tier_summary[model_id] = tier_summary.get(model_id, 0) + 1
-    logger.info("Per-agent model registry: %s (default → %s)",
-                tier_summary, getattr(default_model, "model", "unknown"))
-
-    return ModelRegistry(default_model, agent_models)
-
-
-
 def save_agent_memory(manager):
     """No-op after LangGraph migration — SqliteSaver checkpointer handles persistence."""
     pass
+
+
+# ---------------------------------------------------------------------------
+# CLI agent backend spec and registry
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CLIBackendSpec:
+    """Specifies which CLI agent backend to use for a given agent node.
+
+    Flows through the ``model`` parameter slot of agent build functions.
+    ``create_specialist_agent`` expects this type and dispatches to the
+    CLI agent subprocess wrapper.
+    """
+
+    backend: str          # "claude" | "codex" | "gemini"
+    model: Optional[str] = None  # e.g. "claude-sonnet-4-6", "gpt-5.4"
+    timeout_seconds: int = 3600
+
+
+class CLIBackendRegistry:
+    """Maps agent names to CLI backend specs with a default fallback."""
+
+    def __init__(
+        self,
+        default: CLIBackendSpec,
+        agent_overrides: Optional[dict[str, CLIBackendSpec]] = None,
+    ):
+        self._default = default
+        self._overrides = agent_overrides or {}
+
+    def get(self, agent_name: str) -> CLIBackendSpec:
+        """Return the CLI backend spec for *agent_name*, or the default."""
+        return self._overrides.get(agent_name, self._default)
+
+    @property
+    def default_spec(self) -> CLIBackendSpec:
+        return self._default
+
+
+def create_cli_backend_registry(llm_config: dict) -> CLIBackendRegistry:
+    """Build a :class:`CLIBackendRegistry` from the LLM config.
+
+    Expected top-level keys in the config::
+
+        default_backend: claude
+        default_model: claude-sonnet-4-6
+        timeout_seconds: 3600
+        agent_backends:
+          math_prover_agent:
+            backend: claude
+            model: claude-opus-4-6
+            timeout_seconds: 7200
+    """
+    default = CLIBackendSpec(
+        backend=llm_config.get("default_backend", "claude"),
+        model=llm_config.get("default_model"),
+        timeout_seconds=int(llm_config.get("timeout_seconds", 3600)),
+    )
+
+    overrides: dict[str, CLIBackendSpec] = {}
+    for agent_name, spec in llm_config.get("agent_backends", {}).items():
+        overrides[agent_name] = CLIBackendSpec(
+            backend=spec.get("backend", default.backend),
+            model=spec.get("model", default.model),
+            timeout_seconds=int(spec.get("timeout_seconds", default.timeout_seconds)),
+        )
+
+    return CLIBackendRegistry(default, overrides)

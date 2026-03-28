@@ -599,35 +599,22 @@ def cmd_launchable(args, spec, status, campaign_dir: str) -> int:
 
 
 def cmd_check_credits(args, spec, status, campaign_dir: str) -> int:
-    """Check if the Anthropic API is accessible (validates credits/auth)."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return _json_out({
-            "api_accessible": False,
-            "error": "ANTHROPIC_API_KEY not set in environment",
-        }, 1)
-
-    try:
-        import litellm
-        # Minimal API call to verify access
-        resp = litellm.completion(
-            model="claude-haiku-4-5-20251001",
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=5,
-        )
-        return _json_out({
-            "api_accessible": True,
-            "model_used": "claude-haiku-4-5-20251001",
-            "message": "API access verified.",
-        })
-    except Exception as e:
-        err_str = str(e)
-        is_credit_issue = "credit" in err_str.lower() or "balance" in err_str.lower()
-        return _json_out({
-            "api_accessible": False,
-            "error": err_str,
-            "is_credit_issue": is_credit_issue,
-        }, 1)
+    """Check if a CLI agent tool is accessible."""
+    import subprocess as _sp
+    for cli_tool in ["claude", "codex", "gemini"]:
+        try:
+            _sp.run([cli_tool, "--version"], capture_output=True, timeout=10)
+            return _json_out({
+                "cli_accessible": True,
+                "cli_tool": cli_tool,
+                "message": f"CLI tool '{cli_tool}' is available.",
+            })
+        except (FileNotFoundError, _sp.TimeoutExpired):
+            continue
+    return _json_out({
+        "cli_accessible": False,
+        "error": "No CLI agent tool (claude/codex/gemini) found on PATH",
+    }, 1)
 
 
 def cmd_validate_pipeline(args, spec, status, campaign_dir: str) -> int:
@@ -854,23 +841,17 @@ def cmd_init_campaign(args) -> int:
     os.makedirs(os.path.join(campaign_dir, "logs"), exist_ok=True)
     status = init_status(campaign_dir, spec, yaml_path)
 
-    # --- Provider health check (lightweight) ---
+    # --- CLI tool health check ---
+    import subprocess as _sp
     health_results = {}
-    try:
-        import litellm
-        for model_name in ["claude-opus-4-6", "gpt-5.4", "gemini/gemini-3-pro-preview"]:
-            try:
-                resp = litellm.completion(
-                    model=model_name,
-                    messages=[{"role": "user", "content": "ping"}],
-                    max_tokens=5,
-                    timeout=15,
-                )
-                health_results[model_name] = "ok"
-            except Exception as e:
-                health_results[model_name] = f"error: {type(e).__name__}: {str(e)[:100]}"
-    except ImportError:
-        health_results["litellm"] = "not installed"
+    for cli_tool in ["claude", "codex", "gemini"]:
+        try:
+            _sp.run([cli_tool, "--version"], capture_output=True, timeout=10)
+            health_results[cli_tool] = "ok"
+        except FileNotFoundError:
+            health_results[cli_tool] = "not installed"
+        except _sp.TimeoutExpired:
+            health_results[cli_tool] = "timeout"
 
     return _json_out({
         "action": "init-campaign",

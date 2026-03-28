@@ -17,10 +17,10 @@ This document describes the system architecture of consortium.
 │                      RUNNER (runner.py)                     │
 │  • Parses CLI args (args.py)                                │
 │  • Loads config (.llm_config.yaml via config.py)            │
-│  • Validates API keys, LaTeX prereqs                        │
+│  • Validates CLI tool availability (claude/codex/gemini)    │
 │  • Creates workspace directory                              │
 │  • Writes experiment_metadata.json                          │
-│  • Initializes BudgetManager, TokenTracker                  │
+│  • Initializes CLIBudgetTracker, InvocationTracker          │
 │  • Builds LangGraph (build_research_graph in utils.py)      │
 │  • Invokes graph, writes run_summary.json on completion     │
 └───────────────────────┬─────────────────────────────────────┘
@@ -155,10 +155,12 @@ consortium/
 ├── config.py           YAML config loading, model parameter filtering
 ├── graph.py            LangGraph StateGraph construction and stage order
 ├── state.py            ResearchState TypedDict schema
-├── utils.py            Model factory, graph builder, helpers
-├── budget.py           USD budget tracking and enforcement
+├── utils.py            CLIBackendSpec registry, graph builder, helpers
+├── cli_budget.py       Invocation and wall-clock budget tracking (CLIBudgetTracker)
+├── cli_agent.py        CLI agent subprocess launcher (claude/codex/gemini)
+├── cli_completion.py   CLI completion interface (replaces litellm)
+├── experiment_runner.py  Experiment execution orchestration
 ├── counsel.py          Multi-model debate and synthesis
-├── llm.py              LLM client wrapper (ChatLiteLLM)
 ├── context_compaction.py  Memory distillation between stages
 ├── prereqs.py          LaTeX/system prereq validation
 │
@@ -206,5 +208,5 @@ consortium/
 1. **State is append-only**: `messages` uses `add_messages` reducer — agents append, never overwrite
 2. **Pipeline order is deterministic**: `pipeline_stages` list is fixed at run start; graph edges are wired directly
 3. **Workspace is isolated**: Each run gets its own `results/consortium_<timestamp>/` directory
-4. **Budget is hard-enforced**: `BudgetExceededError` stops the pipeline when `usd_limit` is reached
+4. **Budget is hard-enforced**: `BudgetExceededError` stops the pipeline when invocation or wall-clock limits are reached
 5. **Checkpointing is automatic**: LangGraph writes SQLite checkpoints after every node — resumable from any stage

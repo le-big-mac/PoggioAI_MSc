@@ -79,3 +79,20 @@ def get_provider(model_id: str) -> str:
     if "llama" in model_id:
         return "openrouter"
     return "unknown"
+
+
+# Provider → CLI backend mapping
+_PROVIDER_TO_CLI_BACKEND = {
+    "anthropic": "claude",
+    "openai": "codex",
+    "google": "gemini",
+}
+
+
+def get_cli_backend(model_id: str) -> str:
+    """Return the CLI backend name for a model (e.g. 'claude', 'codex', 'gemini').
+
+    Falls back to 'claude' for unknown providers.
+    """
+    provider = get_provider(model_id)
+    return _PROVIDER_TO_CLI_BACKEND.get(provider, "claude")

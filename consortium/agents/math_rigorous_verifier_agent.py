@@ -13,9 +13,6 @@ from ..prompts.math_rigorous_verifier_instructions import get_math_rigorous_veri
 from ..toolkits.math.claim_graph_tool import MathClaimGraphTool
 from ..toolkits.math.proof_workspace_tool import MathProofWorkspaceTool
 from ..toolkits.math.proof_rigor_checker_tool import MathProofRigorCheckerTool
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent, DeleteFileOrFolder, ListDir, ModifyFile, SearchKeyword, SeeFile,
-)
 
 
 ADVERSARIAL_SYSTEM_PROMPT_PREFIX = """Your agent_name is "math_rigorous_verifier_agent" (ADVERSARIAL MODE).
@@ -74,15 +71,6 @@ def get_tools(workspace_dir: Optional[str]) -> list:
         MathProofWorkspaceTool(working_dir=workspace_dir),
         MathProofRigorCheckerTool(working_dir=workspace_dir),
     ]
-    if workspace_dir:
-        tools += [
-            SeeFile(working_dir=workspace_dir),
-            CreateFileWithContent(working_dir=workspace_dir),
-            ModifyFile(working_dir=workspace_dir),
-            ListDir(working_dir=workspace_dir),
-            SearchKeyword(working_dir=workspace_dir),
-            DeleteFileOrFolder(working_dir=workspace_dir),
-        ]
     return tools
 
 

@@ -35,25 +35,30 @@ The pipeline must be installed and working before adding campaign orchestration 
 ```bash
 ./scripts/bootstrap.sh researchlab full
 conda activate researchlab
-cp .env.example .env
 python scripts/preflight_check.py --with-docs --with-web --with-experiment --with-latex
 ```
 
 Verify a single manual run works end-to-end before using OpenClaw.
 
-### API Keys
+### CLI Agent Tools
 
-At minimum, set `OPENAI_API_KEY` in `.env`. For the default campaign config, which uses `claude-opus-4-6` as the main model, also set `ANTHROPIC_API_KEY`.
+At minimum, have one CLI agent tool installed. For the default campaign config, which uses `claude` as the main CLI tool, verify it is on PATH:
 
-If using Model Counsel (`--enable-counsel` in stage `args`), all three provider keys are required:
-
-```
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-GOOGLE_API_KEY=...
+```bash
+which claude
 ```
 
-For notifications, optionally set:
+If using Model Counsel (`--enable-counsel` in stage `args`), all three CLI tools are required:
+
+```bash
+which claude    # Anthropic Claude CLI
+which codex     # OpenAI Codex CLI
+which gemini    # Google Gemini CLI
+```
+
+No API keys are needed — CLI tools authenticate through their own subscriptions (Claude Max, ChatGPT Pro, Gemini Advanced, etc.).
+
+For notifications, optionally set in `.env`:
 
 ```
 SLACK_WEBHOOK_URL=...
@@ -200,11 +205,11 @@ Each stage's `task_file` is a plain `.txt` file containing the task prompt that 
 
 ## Budget
 
-Total cost: $4.23
+Invocations used: 47
 
-## Token Usage
+## Wall-Clock Time
 
-Prompt tokens: 1,234,567  |  Completion tokens: 234,567
+Elapsed: 2h 15m
 ---
 
 [your task file text here]
@@ -380,8 +385,8 @@ results/muon_campaign/           ← campaign_dir
 results/muon_campaign/theory/    ← stage workspace (fresh stage)
   math_workspace/
   final_paper.tex                ← if produced
-  run_token_usage.json
-  budget_state.json
+  run_invocation_usage.json
+  cli_budget_state.json
   ...
 
 results/muon_campaign/experiments/  ← stage workspace (resumed from theory)
@@ -431,8 +436,8 @@ After each stage completes, `distill_stage_memory()` writes `memory/<stage_id>_s
 
 - Excerpts (up to 4000 chars) of each required artifact
 - Short excerpts from each file in `memory_dirs` (up to 1500 chars, up to 20 files)
-- Budget total from `budget_state.json`
-- Token counts from `run_token_usage.json`
+- Budget total from `cli_budget_state.json`
+- Invocation counts from `run_invocation_usage.json`
 - Pipeline status from `STATUS.txt`
 
 This summary is what gets prepended to the next stage's task prompt. Inspect it to verify that the downstream agent receives the information it needs:
@@ -578,9 +583,9 @@ tail -100 results/muon_campaign/logs/theory_stderr.log
 # 3. Inspect what did get produced
 ls results/muon_campaign/theory/math_workspace/
 
-# 4. Check token and budget state
-cat results/muon_campaign/theory/run_token_usage.json
-cat results/muon_campaign/theory/budget_state.json
+# 4. Check invocation and budget state
+cat results/muon_campaign/theory/run_invocation_usage.json
+cat results/muon_campaign/theory/cli_budget_state.json
 ```
 
 ### Option A: Fix and retry from scratch
@@ -621,7 +626,7 @@ Once the required artifacts exist, tick the heartbeat — it will detect complet
 
 ### Budget exhaustion
 
-If `budget.lock` exists in a stage workspace, the stage stopped due to cost cap. Raise `budget.usd_limit` in `.llm_config.yaml`, remove the lock file, and resume.
+If `budget.lock` exists in a stage workspace, the stage stopped due to the invocation or wall-clock budget cap. Raise the limits in `.llm_config.yaml`, remove the lock file, and resume.
 
 ---
 
@@ -662,15 +667,17 @@ Two stages with no shared `depends_on` relationship can run concurrently. The he
 
 ### Budget guidance
 
-| Stage type | Recommended `budget.usd_limit` |
-|---|---|
-| Theory only (`full_research` + math agents) | $50–150 |
-| Experiments only (`full_research`) | $30–80 |
-| Paper synthesis (`full_research` + `--require-pdf`) | $40–100 |
-| Full three-stage campaign | $150–300 |
-| Full campaign with `--enable-counsel` | $600+ |
+All LLM costs are **included in your CLI tool subscription** (Claude Max, ChatGPT Pro, Gemini Advanced, etc.). Budget tracking in consortium monitors invocation counts and wall-clock time rather than dollar costs.
 
-Set `budget.usd_limit` in `.llm_config.yaml` before starting a campaign. Each stage has its own budget ledger in its workspace.
+| Stage type | Recommended invocation limit |
+|---|---|
+| Theory only (`full_research` + math agents) | 200–500 invocations |
+| Experiments only (`full_research`) | 100–300 invocations |
+| Paper synthesis (`full_research` + `--require-pdf`) | 150–400 invocations |
+| Full three-stage campaign | 500–1000 invocations |
+| Full campaign with `--enable-counsel` | 2000+ invocations |
+
+Set invocation and wall-clock limits in `.llm_config.yaml` before starting a campaign. Each stage has its own budget ledger in its workspace.
 
 ---
 
@@ -729,7 +736,7 @@ Base URL: `http://<callback_host>:<callback_port + 1>` (default: `http://127.0.0
 | `<campaign_dir>/logs/<stage_id>_stdout.log` | Stage stdout |
 | `<campaign_dir>/logs/<stage_id>_stderr.log` | Stage stderr — first place to look on failure |
 | `<campaign_dir>/pids/<stage_id>.pid` | PID of the running stage subprocess |
-| `<workspace>/budget_state.json` | Budget spend for this stage |
+| `<workspace>/cli_budget_state.json` | Invocation budget for this stage |
 | `<workspace>/budget.lock` | Present if budget cap was hit |
-| `<workspace>/run_token_usage.json` | Token totals for this stage |
+| `<workspace>/run_invocation_usage.json` | Invocation totals for this stage |
 | `<workspace>/checkpoints.db` | LangGraph SQLite checkpoint — enables `--resume` |

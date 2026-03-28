@@ -1,67 +1,43 @@
 # =============================================================================
-# PoggioAI/MSc LLM Configuration
+# PoggioAI/MSc LLM Configuration — CLI Agent Mode
 # =============================================================================
-# Customize this file for your runs. See .llm_config.yaml.example for docs.
-# This file is gitignored after the initial clone — your changes stay local.
+# Agents run as local CLI tool subprocesses (Claude Code, Codex, Gemini CLI)
+# instead of making API calls. Much cheaper with subscription plans.
 
-# --- Main model for all agents ---
-main_agents:
-  model: claude-sonnet-4-6           # cheaper default; use claude-opus-4-6 for best quality
-  reasoning_effort: high
-  budget_tokens: 128000
+# --- Default CLI backend ---
+default_backend: claude              # claude | codex | gemini
+default_model: claude-sonnet-4-6     # model flag passed to the CLI tool
+timeout_seconds: 3600                # max wall-clock seconds per agent invocation
 
-# --- Experiment tool models ---
-run_experiment_tool:
-  code_model: claude-sonnet-4-6
-  feedback_model: claude-sonnet-4-6
-  vlm_model: claude-sonnet-4-6
-  report_model: claude-sonnet-4-6
-
-# --- Budget enforcement ---
+# --- Budget enforcement (invocation / wall-clock based) ---
 budget:
-  usd_limit: 25                      # safe exploration budget; increase for production
-  hard_stop: true
-  fail_closed: true
-  pricing:
-    claude-opus-4-6:
-      input_per_1k: 0.005
-      output_per_1k: 0.025
-    claude-sonnet-4-6:
-      input_per_1k: 0.003
-      output_per_1k: 0.015
-    claude-sonnet-4-5:
-      input_per_1k: 0.003
-      output_per_1k: 0.015
-    gpt-5:
-      input_per_1k: 0.002
-      output_per_1k: 0.012
-    gpt-5.2:
-      input_per_1k: 0.00175
-      output_per_1k: 0.014
-    gpt-5.4:
-      input_per_1k: 0.0025
-      output_per_1k: 0.015
-    gpt-5.3-codex:
-      input_per_1k: 0.002
-      output_per_1k: 0.01
-    gemini-3-pro-preview:
-      input_per_1k: 0.00125
-      output_per_1k: 0.01
+  max_invocations: 100               # max total CLI agent calls
+  max_wall_clock_seconds: 14400      # max total subprocess time (4h)
 
-# --- Multi-model counsel (debate) ---
-# Requires API keys for ALL listed providers. Disabled by default.
-counsel:
-  enabled: false                     # set true + add all API keys to enable
-  max_debate_rounds: 3
-  synthesis_model: claude-sonnet-4-6
-  models:
-  - model: claude-sonnet-4-6
-    reasoning_effort: high
-  - model: gpt-5.4
-    reasoning_effort: high
-    verbosity: high
-  - model: gemini-3-pro-preview
-    thinking_budget: 131072
+# --- Per-agent backend overrides (optional) ---
+# Assign different CLI backends or models to specific agents.
+# agent_backends:
+#   math_prover_agent:
+#     backend: claude
+#     model: claude-opus-4-6
+#     timeout_seconds: 7200
+#   experimentation_agent:
+#     backend: codex
+#     model: gpt-5.4
+#   math_literature_agent:
+#     backend: gemini
+#     model: gemini-3-pro-preview
+
+# --- Counsel mode (multi-model debate) ---
+# counsel:
+#   max_debate_rounds: 3
+#   specs:
+#     - model: claude-opus-4-6
+#       backend: claude
+#     - model: gpt-5.4
+#       backend: codex
+#     - model: gemini-3-pro-preview
+#       backend: gemini
 
 # --- Persona council (V2 pipeline) ---
 persona_council:
@@ -71,34 +47,3 @@ persona_council:
 # --- Duality check model ---
 duality_check:
   model: claude-sonnet-4-6
-
-# --- Per-agent model tiers (optional optimization) ---
-# When enabled, assigns cheaper models to simpler agents.
-per_agent_models:
-  enabled: false
-  tiers:
-    opus:
-      model: claude-opus-4-6
-      reasoning_effort: high
-      budget_tokens: 128000
-    sonnet:
-      model: claude-sonnet-4-6
-      reasoning_effort: high
-      budget_tokens: 128000
-    economy:
-      model: claude-sonnet-4-6
-      reasoning_effort: low
-  agent_tiers:
-    literature_review_agent: sonnet
-    math_literature_agent: sonnet
-    experiment_literature_agent: sonnet
-    math_empirical_verifier_agent: sonnet
-    formalize_results_agent: sonnet
-    writeup_agent: sonnet
-    reviewer_agent: sonnet
-    experimentation_agent: sonnet
-    followup_lit_review: sonnet
-    proofreading_agent: economy
-    proof_transcription_agent: economy
-    experiment_transcription_agent: economy
-    resource_preparation_agent: economy

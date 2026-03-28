@@ -202,7 +202,6 @@ def main() -> int:
     mode = args.mode  # None if not specified
 
     required_modules = [
-        "litellm",
         "yaml",
         "dotenv",
         "fitz",
@@ -290,16 +289,12 @@ def main() -> int:
                 "and add TINKER_API_KEY to your .env file."
             )
 
-    api_key_names = [
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "GOOGLE_API_KEY",
-        "OPENROUTER_API_KEY",
-        "DEEPSEEK_API_KEY",
-    ]
-    if not any(os.getenv(name) for name in api_key_names):
+    # CLI-agent mode: check that at least one CLI tool is available
+    import shutil
+    cli_tools = ["claude", "codex", "gemini"]
+    if not any(shutil.which(tool) for tool in cli_tools):
         warnings.append(
-            "No API key detected in environment. Add at least one key in .env or shell env vars."
+            "No CLI agent tool found on PATH. Install at least one of: claude, codex, gemini."
         )
 
     llm_cfg = REPO_ROOT / ".llm_config.yaml"

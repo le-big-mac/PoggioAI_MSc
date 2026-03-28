@@ -167,45 +167,15 @@ def visualizer(image_path: str, question: str | None = None) -> str:
     mime_type, _ = mimetypes.guess_type(image_path)
     base64_image = encode_image(image_path)
 
-    payload = {
-        "model": "gpt-4o",  # Use proven GPT-4o for reliable vision performance
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": question},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}},
-                ],
-            }
-        ],
-        "max_tokens": 1000,
-    }
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    body = response.json()
+    # Use cli_completion instead of direct OpenAI API call.
+    from ....cli_completion import cli_completion
+    full_prompt = f"{question}\n\nImage file to analyze: {os.path.abspath(image_path)}"
+    output = cli_completion(full_prompt, backend="claude")
 
-    # Track token usage for this direct OpenAI call, if usage is available.
-    try:
-        usage = body.get("usage", {})
-        prompt_tokens = int(usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0)
-        completion_tokens = int(usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0)
-        if prompt_tokens or completion_tokens:
-            from ....token_usage_tracker import record_token_usage
+    # Placeholder for compatibility with downstream code
+    body = {"choices": [{"message": {"content": output}}]}
 
-            record_token_usage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                source="visual_qa",
-                model_id="gpt-4o",
-            )
-    except Exception:
-        # Never fail the tool for tracking issues.
-        pass
-
-    try:
-        output = body["choices"][0]["message"]["content"]
-    except Exception:
-        raise Exception(f"Response format unexpected: {body}")
+    # output already set by cli_completion above
 
     if add_note:
         output = f"You did not provide a particular question, so here is a detailed caption for the image: {output}"

@@ -50,8 +50,8 @@ Written at run completion. Provides a quick overview of what the run produced.
     "proofreading_agent",
     "reviewer_agent"
   ],
-  "total_cost_usd": 12.34,
-  "total_tokens": 450000,
+  "total_invocations": 47,
+  "total_wall_clock_seconds": 1842.3,
   "final_paper": "final_paper.pdf",
   "workspace": "results/consortium_20260307_120000"
 }
@@ -59,17 +59,19 @@ Written at run completion. Provides a quick overview of what the run produced.
 
 ---
 
-## `budget_state.json`
+## `cli_budget_state.json`
 
-Written after every LLM call. Tracks cumulative spend.
+Written after every CLI agent invocation. Tracks cumulative usage via the CLIBudgetTracker.
 
 ```json
 {
-  "usd_limit": 600.0,
-  "total_usd": 12.340500,
-  "by_model": {
-    "claude-opus-4-6": 10.25,
-    "claude-sonnet-4-6": 2.09
+  "invocation_limit": 500,
+  "wall_clock_limit_seconds": 14400,
+  "total_invocations": 47,
+  "total_wall_clock_seconds": 1842.3,
+  "by_backend": {
+    "claude": 35,
+    "codex": 12
   },
   "last_updated": "2026-03-07T14:30:00Z"
 }
@@ -77,13 +79,13 @@ Written after every LLM call. Tracks cumulative spend.
 
 ---
 
-## `budget_ledger.jsonl`
+## `cli_budget_ledger.jsonl`
 
-Append-only log of every LLM call cost. One JSON object per line.
+Append-only log of every CLI agent invocation. One JSON object per line.
 
 ```jsonl
-{"call_id": "uuid-1234", "timestamp": "2026-03-07T12:05:00Z", "model_id": "claude-opus-4-6", "prompt_tokens": 15000, "completion_tokens": 3000, "cost_usd": 0.450000, "total_usd": 0.450000, "usd_limit": 600.0}
-{"call_id": "uuid-5678", "timestamp": "2026-03-07T12:10:00Z", "model_id": "claude-opus-4-6", "prompt_tokens": 18000, "completion_tokens": 5000, "cost_usd": 0.645000, "total_usd": 1.095000, "usd_limit": 600.0}
+{"call_id": "uuid-1234", "timestamp": "2026-03-07T12:05:00Z", "backend": "claude", "model": "claude-opus-4-6", "wall_clock_seconds": 45.2, "invocation_count": 1, "total_invocations": 1, "invocation_limit": 500}
+{"call_id": "uuid-5678", "timestamp": "2026-03-07T12:10:00Z", "backend": "claude", "model": "claude-opus-4-6", "wall_clock_seconds": 38.7, "invocation_count": 1, "total_invocations": 2, "invocation_limit": 500}
 ```
 
 ---
@@ -201,10 +203,10 @@ Written by ReviewerAgent with scoring and actionable feedback.
 
 ## `agent_llm_calls.jsonl`
 
-Full log of every LLM interaction. One JSON object per line. Large file (~20–100 MB per run).
+Full log of every CLI agent interaction. One JSON object per line. Large file (~20–100 MB per run).
 
 ```jsonl
-{"timestamp": "2026-03-07T12:05:00Z", "agent": "ideation_agent", "model": "claude-opus-4-6", "prompt_tokens": 5000, "completion_tokens": 1200, "message_preview": "Based on the research task, I will..."}
+{"timestamp": "2026-03-07T12:05:00Z", "agent": "ideation_agent", "backend": "claude", "model": "claude-opus-4-6", "wall_clock_seconds": 45.2, "message_preview": "Based on the research task, I will..."}
 ```
 
 ---

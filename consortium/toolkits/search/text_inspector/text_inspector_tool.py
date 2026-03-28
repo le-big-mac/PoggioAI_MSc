@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import Optional, Type, Any
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, ConfigDict
-import litellm
 
 
 class TextInspectorToolInput(BaseModel):
@@ -14,37 +13,26 @@ class TextInspectorTool(BaseTool):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     name: str = "inspect_file_as_text"
     description: str = """
-Analyze complex documents and extract information. Use this for research papers (PDFs), Word docs, presentations, or when you need to ask questions about file content.
+Converts documents to text and returns the content directly.
 Handles: PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), HTML, audio files (transcription), and plain text.
 NOT for: Images, or simple workspace file reading (use see_file for that).
-Can answer questions about the content using AI analysis."""
+Returns the converted text content (no LLM analysis)."""
     args_schema: Type[BaseModel] = TextInspectorToolInput
     model_id: str = ""
     text_limit: int = 100000
     working_dir: Optional[str] = None
-    chunk_size: int = 6000
-    api_delay: float = 12.0
 
     md_converter: Any = None
-    raw_model_id: Optional[str] = None
 
     def __init__(self, model=None, text_limit: int = 100000, working_dir: str = None, **kwargs: Any):
         model_id = model if isinstance(model, str) else getattr(model, 'model', str(model)) if model else ""
-        import os
-        rpm_limit = int(os.environ.get("ANTHROPIC_RPM_LIMIT", "5"))
-        api_delay = max(60 / rpm_limit, 10)
-        from ...model_utils import get_raw_model
-        raw_id = get_raw_model(model)
         from ..text_web_browser.mdconvert import MarkdownConverter
         converter = MarkdownConverter()
         super().__init__(
             model_id=model_id,
             text_limit=text_limit,
             working_dir=working_dir,
-            chunk_size=6000,
-            api_delay=api_delay,
             md_converter=converter,
-            raw_model_id=raw_id if isinstance(raw_id, str) else model_id,
             **kwargs
         )
 
@@ -62,110 +50,7 @@ Can answer questions about the content using AI analysis."""
             # Relative path - join with working_dir to create absolute path
             return os.path.abspath(os.path.join(self.working_dir, path))
 
-    def _chunk_text(self, text: str) -> list[str]:
-        """Split text into chunks that fit within token limits."""
-        if len(text) <= self.chunk_size:
-            return [text]
-
-        chunks = []
-        current_pos = 0
-
-        while current_pos < len(text):
-            # Try to find a natural break point (paragraph, sentence, etc.)
-            end_pos = current_pos + self.chunk_size
-
-            if end_pos >= len(text):
-                chunks.append(text[current_pos:])
-                break
-
-            # Look for natural break points in the last 500 chars
-            chunk_end = text[current_pos:end_pos]
-
-            # Try to break on paragraph boundaries first
-            last_paragraph = chunk_end.rfind('\n\n')
-            if last_paragraph > self.chunk_size * 0.5:  # At least 50% of chunk size
-                end_pos = current_pos + last_paragraph
-            else:
-                # Fall back to sentence boundaries
-                last_sentence = chunk_end.rfind('. ')
-                if last_sentence > self.chunk_size * 0.5:
-                    end_pos = current_pos + last_sentence + 1
-                else:
-                    # Fall back to word boundaries
-                    last_space = chunk_end.rfind(' ')
-                    if last_space > self.chunk_size * 0.5:
-                        end_pos = current_pos + last_space
-
-            chunks.append(text[current_pos:end_pos])
-            current_pos = end_pos
-
-        return chunks
-
-    def _summarize_chunk(self, chunk: str, question: str, chunk_num: int, total_chunks: int) -> str:
-        """Summarize a single chunk with focus on the research question."""
-        import time
-
-        messages = [
-            {
-                "role": "system",
-                "content": f"You are analyzing part {chunk_num} of {total_chunks} of a research paper. "
-                          f"Extract key information relevant to this question: {question}\n"
-                          f"Focus on: methods, findings, novelty, limitations, and connections to the question."
-            },
-            {
-                "role": "user",
-                "content": f"Document section:\n\n{chunk}\n\n"
-                          f"Provide a concise summary (max 200 words) highlighting information relevant to: {question}"
-            },
-        ]
-
-        # Add delay between API calls to avoid rate limiting
-        if chunk_num > 1:
-            time.sleep(self.api_delay)  # Configurable delay based on rate limits
-
-        try:
-            response = litellm.completion(model=self.model_id, messages=messages)
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"Error processing chunk {chunk_num}: {str(e)}"
-
-    def forward_initial_exam_mode(self, file_path, question):
-        safe_file_path = self._safe_path(file_path)
-        result = self.md_converter.convert(safe_file_path)
-
-        if file_path[-4:] in [".png", ".jpg"]:
-            raise Exception("Cannot use inspect_file_as_text tool with images: use visualizer instead!")
-
-        if ".zip" in file_path:
-            return result.text_content
-
-        if not question:
-            return result.text_content
-
-        if len(result.text_content) < 4000:
-            return "Document content: " + result.text_content
-
-        messages = [
-            {
-                "role": "system",
-                "content": "Here is a file:\n### "
-                        + str(result.title)
-                        + "\n\n"
-                        + result.text_content[: self.text_limit],
-            },
-            {
-                "role": "user",
-                "content": "Now please write a short, 5 sentence caption for this document, that could help someone asking this question: "
-                        + question
-                        + "\n\nDon't answer the question yourself! Just provide useful notes on the document",
-            },
-        ]
-        response = litellm.completion(model=self.model_id, messages=messages)
-        return response.choices[0].message.content
-
     def _run(self, file_path, question: str | None = None) -> str:
-        import time
-
         safe_file_path = self._safe_path(file_path)
         result = self.md_converter.convert(safe_file_path)
 
@@ -175,69 +60,5 @@ Can answer questions about the content using AI analysis."""
         if ".zip" in file_path:
             return result.text_content
 
-        if not question:
-            return result.text_content
-
-        # If text is small enough, use original approach
-        if len(result.text_content) <= self.chunk_size:
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You will have to write a short caption for this file, then answer this question:"
-                            + question,
-                },
-                {
-                    "role": "user",
-                    "content": "Here is the complete file:\n### "
-                            + str(result.title)
-                            + "\n\n"
-                            + result.text_content[: self.text_limit],
-                },
-                {
-                    "role": "user",
-                    "content": "Now answer the question below. Use these three headings: '1. Short answer', '2. Extremely detailed answer', '3. Additional Context on the document and question asked'."
-                            + question,
-                },
-            ]
-            response = litellm.completion(model=self.model_id, messages=messages)
-            return response.choices[0].message.content
-
-        # For large documents, use chunking approach
-        print(f"Processing large document ({len(result.text_content)} chars) in chunks...")
-        chunks = self._chunk_text(result.text_content[:self.text_limit])
-
-        # Process each chunk and collect summaries
-        chunk_summaries = []
-        for i, chunk in enumerate(chunks, 1):
-            print(f"Processing chunk {i}/{len(chunks)}...")
-            summary = self._summarize_chunk(chunk, question, i, len(chunks))
-            chunk_summaries.append(f"Section {i}: {summary}")
-
-        # Combine all summaries into final analysis
-        combined_summary = "\n\n".join(chunk_summaries)
-
-        # Add delay before final synthesis
-        time.sleep(self.api_delay)
-
-        # Final synthesis of all chunks
-        final_messages = [
-            {
-                "role": "system",
-                "content": f"You are synthesizing analysis from {len(chunks)} sections of a research paper titled: {result.title}\n"
-                          f"Provide a comprehensive answer to: {question}"
-            },
-            {
-                "role": "user",
-                "content": f"Here are the section summaries:\n\n{combined_summary}\n\n"
-                          f"Now provide a comprehensive answer using these headings:\n"
-                          f"1. Short answer\n2. Extremely detailed answer\n3. Additional Context on the document and question asked\n\n"
-                          f"Question: {question}"
-            },
-        ]
-
-        try:
-            response = litellm.completion(model=self.model_id, messages=final_messages)
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"Error in final synthesis: {str(e)}\n\nChunk summaries:\n{combined_summary}"
-
+        # Return the converted text content directly (truncated to text_limit)
+        return result.text_content[:self.text_limit]

@@ -18,9 +18,10 @@ import os
 import re
 from typing import Dict, Any, List, Optional, Tuple, Type
 
-import litellm
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, ConfigDict
+
+from ...cli_completion import cli_completion
 
 
 class LaTeXReflectionToolInput(BaseModel):
@@ -413,11 +414,7 @@ Provide a structured review with:
 
         try:
             full_prompt = f"{system_prompt}\n\n{user_prompt}"
-            response = litellm.completion(
-                model=self.model_id,
-                messages=[{"role": "user", "content": full_prompt}],
-            )
-            output = response.choices[0].message.content
+            output = cli_completion(full_prompt)
 
             return {
                 "raw_review": output,
@@ -545,11 +542,7 @@ CRITICAL: Generate ONLY the improved LaTeX content that preserves the EXACT same
 
         try:
             full_prompt = f"{system_prompt}\n\n{user_prompt}"
-            response = litellm.completion(
-                model=self.model_id,
-                messages=[{"role": "user", "content": full_prompt}],
-            )
-            improved_content = response.choices[0].message.content
+            improved_content = cli_completion(full_prompt)
             cleaned_content = self._clean_improved_content(improved_content)
 
             if not self._validate_content_consistency(content, cleaned_content):

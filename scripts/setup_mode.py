@@ -49,11 +49,12 @@ def setup_env_file(mode: str) -> None:
     else:
         lines = [
             "# PoggioAI/MSc Environment Configuration",
-            "# Copy API keys here. This file is gitignored.",
+            "# CLI-agent mode: no LLM API keys needed.",
+            "# Agents run via local CLI tools (claude, codex, gemini).",
             "",
-            "# Required: at least one LLM API key",
-            "# ANTHROPIC_API_KEY=sk-ant-...",
-            "# OPENAI_API_KEY=sk-...",
+            "# Optional: search and GPU training keys",
+            "# SERPER_API_KEY=...",
+            "# TINKER_API_KEY=...",
             "",
         ]
 

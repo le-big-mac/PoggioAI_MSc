@@ -1182,9 +1182,8 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
             }
 
         # ------------------------------------------------------------------
-        # LLM feasibility assessment
+        # CLI-based feasibility assessment
         # ------------------------------------------------------------------
-        import litellm as _litellm
 
         # Build novelty context for the feasibility prompt
         novelty_context = ""
@@ -1221,17 +1220,13 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
             'Respond in JSON (no markdown fences): {"feasible": true/false, "reason": "one paragraph explanation"}'
         )
         try:
-            resp = _litellm.completion(
-                model="claude-sonnet-4-6",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1024,
-            )
-            raw = resp.choices[0].message.content or ""
+            from .cli_completion import cli_completion
+            raw = cli_completion(prompt, backend="claude")
             raw = _re.sub(r"^```(?:json)?\s*", "", raw.strip())
             raw = _re.sub(r"\s*```$", "", raw)
             result = json.loads(raw)
         except Exception as e:
-            print(f"[lit_review_gate] LLM assessment failed: {e}, passing through")
+            print(f"[lit_review_gate] CLI assessment failed: {e}, passing through")
             return {
                 "current_agent": "brainstorm_agent",
                 "lit_review_feasibility": {"feasible": True, "reason": f"assessment failed: {e}"},
@@ -1390,8 +1385,6 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
             for i, g in enumerate(goals)
         )
 
-        import litellm as _litellm
-
         prompt = (
             "You are a rigorous research goal completion assessor.\n\n"
             f"RESEARCH GOALS:\n{goal_descriptions}\n\n"
@@ -1405,17 +1398,13 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
         )
 
         try:
-            resp = _litellm.completion(
-                model="claude-sonnet-4-6",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=4096,
-            )
-            raw = resp.choices[0].message.content or ""
+            from .cli_completion import cli_completion
+            raw = cli_completion(prompt, backend="claude")
             raw = _re.sub(r"^```(?:json)?\s*", "", raw.strip())
             raw = _re.sub(r"\s*```$", "", raw)
             result = json.loads(raw)
         except Exception as e:
-            print(f"[verify_completion] LLM assessment failed: {e}, passing through")
+            print(f"[verify_completion] CLI assessment failed: {e}, passing through")
             return {
                 "current_agent": "formalize_results_agent",
                 "verify_completion_result": {
@@ -1705,9 +1694,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
     """
     from .graph_config import ResearchGraphConfig  # noqa: F811 (type hint above)
 
-    # Unpack config to local variables (preserves existing closures and
-    # sub-builder call sites unchanged).
-    model = config.model
+    # Unpack config to local variables.
     workspace_dir = config.workspace_dir
     pipeline_mode = config.pipeline_mode
     enable_math_agents = config.enable_math_agents
@@ -1719,10 +1706,9 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
     authorized_imports = config.authorized_imports
     summary_model_id = config.summary_model_id
     checkpointer = config.checkpointer
-    counsel_models = config.counsel_models
-    budget_manager = config.budget_manager
-    model_registry = config.model_registry
     tree_search_config = config.tree_search
+    # Kept as a local for sub-builder compatibility (passed but overridden by registry)
+    model = None
 
     # Sub-config unpacking
     enforce_paper_artifacts = config.artifacts.enforce_paper_artifacts
@@ -1740,13 +1726,12 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
     enable_duality_check = config.duality_check.enabled
     from .persona_council import create_persona_council_node, create_duality_check_node
 
-    counsel_kwargs = {"counsel_models": counsel_models} if counsel_models is not None else {}
+    counsel_kwargs = {}
+    cli_backend_registry = config.cli_backend_registry
 
     def _m(agent_name: str) -> Any:
-        """Resolve the model for *agent_name* from the registry or fallback."""
-        if model_registry is not None:
-            return model_registry.get(agent_name)
-        return model
+        """Resolve the CLI backend spec for *agent_name*."""
+        return cli_backend_registry.get(agent_name)
 
     def _wrap(node, name):
         return with_pdf_summary(node, name, workspace_dir, summary_model_id)
@@ -1762,7 +1747,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
                 model=model,
                 workspace_dir=workspace_dir,
                 authorized_imports=authorized_imports,
-                counsel_models=counsel_models,
+                counsel_models=None,
                 summary_model_id=summary_model_id,
                 tree_config=tree_search_config,
                 adversarial_verification=adversarial_verification,
@@ -1772,9 +1757,9 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
                 model=model,
                 workspace_dir=workspace_dir,
                 authorized_imports=authorized_imports,
-                counsel_models=counsel_models,
+                counsel_models=None,
                 summary_model_id=summary_model_id,
-                model_registry=model_registry,
+                model_registry=cli_backend_registry,
                 adversarial_verification=adversarial_verification,
             )
         theory_track_node = build_track_subgraph_node(theory_subgraph, "theory_track_status", workspace_dir=workspace_dir)
@@ -1787,7 +1772,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
             model=model,
             workspace_dir=workspace_dir,
             authorized_imports=authorized_imports,
-            counsel_models=counsel_models,
+            counsel_models=None,
             summary_model_id=summary_model_id,
             tree_config=tree_search_config,
             adversarial_verification=adversarial_verification,
@@ -1797,9 +1782,9 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
             model=model,
             workspace_dir=workspace_dir,
             authorized_imports=authorized_imports,
-            counsel_models=counsel_models,
+            counsel_models=None,
             summary_model_id=summary_model_id,
-            model_registry=model_registry,
+            model_registry=cli_backend_registry,
         )
 
     # Build all nodes
@@ -1811,7 +1796,6 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
             max_debate_rounds=persona_debate_rounds,
             synthesis_model=persona_synthesis_model,
             max_post_vote_retries=persona_max_post_vote_retries,
-            budget_manager=budget_manager,
         ),
         "literature_review_agent": _wrap(
             build_literature_review_node(_m("literature_review_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
@@ -1848,7 +1832,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
             "formalize_results_agent",
         ),
         "followup_lit_review": _wrap(
-            build_followup_lit_review_node(_m("followup_lit_review"), workspace_dir, authorized_imports, counsel_models),
+            build_followup_lit_review_node(_m("followup_lit_review"), workspace_dir, authorized_imports, None),
             "followup_lit_review_agent",
         ),
         # Paper production chain (reused from v1)
@@ -1878,7 +1862,6 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
         nodes["duality_check"] = create_duality_check_node(
             workspace_dir=workspace_dir,
             check_model=duality_check_model,
-            budget_manager=budget_manager,
         )
         nodes["duality_gate"] = build_duality_gate_node()
 

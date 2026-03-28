@@ -30,9 +30,9 @@ We hope this will be helpful for you! If you like this project please support us
 
 ## 5-Minute Quickstart
 
-> **Cost**: ~$2–10 (single model, no counsel) | **Time**: 15–40 min | **Requires**: one API key
+> **Cost**: included in your subscription plan (Claude Max, ChatGPT Pro, Gemini Advanced, etc.) -- no per-token costs | **Time**: 15-40 min | **Requires**: at least one CLI agent tool installed
 >
-> **Prerequisites**: [conda](https://docs.conda.io/en/latest/miniconda.html) (Miniconda or Anaconda) must be installed first.
+> **Prerequisites**: [conda](https://docs.conda.io/en/latest/miniconda.html) (Miniconda or Anaconda) and at least one CLI agent tool installed (`claude`, `codex`, and/or `gemini`).
 
 ```bash
 # 1. Bootstrap environment (one-time, ~5 min)
@@ -40,14 +40,16 @@ We hope this will be helpful for you! If you like this project please support us
 
 conda activate researchlab
 
-# 2. Set your API key (only one provider needed)
-cp .env.example .env
-echo "ANTHROPIC_API_KEY=your_key_here" >> .env   # or OPENAI_API_KEY / GOOGLE_API_KEY
+# 2. Install CLI agent tools (only one provider needed)
+#    Claude:  npm install -g @anthropic-ai/claude-code
+#    Codex:   npm install -g @openai/codex
+#    Gemini:  npm install -g @anthropic-ai/gemini-cli   # or install via pip
+# Then authenticate each tool per its own docs (e.g., `claude auth login`).
 
-# 3. Validate setup without spending tokens
+# 3. Validate setup without running the pipeline
 python launch_multiagent.py --task "test" --dry-run
 
-# 4. Run the included quickstart example (~$3, produces markdown paper draft)
+# 4. Run the included quickstart example (produces markdown paper draft)
 python launch_multiagent.py \
   --task "$(cat examples/quickstart/task.txt)" \
   --output-format markdown \
@@ -56,13 +58,13 @@ python launch_multiagent.py \
 ```
 
 After the run, look in `results/consortium_<timestamp>/` for:
-- `final_paper.md` — the generated paper draft
-- `paper_workspace/literature_review.pdf` — literature synthesis
-- `budget_state.json` — total tokens and cost used
+- `final_paper.md` -- the generated paper draft
+- `paper_workspace/literature_review.pdf` -- literature synthesis
+- `budget_state.json` -- invocation count and wall-clock time used
 
 **Want a full paper with LaTeX/PDF?** Install LaTeX (`./scripts/bootstrap.sh researchlab latex`) and drop `--output-format markdown`.
 
-**Want multi-model quality?** Add `--enable-counsel` (requires OpenAI + Anthropic + Google keys; ~4× cost).
+**Want multi-model quality?** Add `--enable-counsel` (requires claude + codex + gemini CLI tools installed).
 
 **Want math theorem verification?** Add `--enable-math-agents` (see [Math Workflow](#math-workflow)).
 
@@ -125,9 +127,9 @@ Runs are resumable through LangGraph checkpoints (`checkpoints.db`) and can be s
 
 ### What PoggioAI/MSc Guarantees
 
-- **Workflow execution**: Given valid API keys and a task prompt, the pipeline will execute every stage in the fixed workflow graph and produce the documented artifacts.
+- **Workflow execution**: Given valid CLI agent tools and a task prompt, the pipeline will execute every stage in the fixed workflow graph and produce the documented artifacts.
 - **Artifact generation**: Each stage produces its mandatory output files (see [Quality Gates and Artifact Contracts](#quality-gates-and-artifact-contracts)).
-- **Budget enforcement**: The pipeline will halt before exceeding the configured `budget.usd_limit`.
+- **Budget enforcement**: The pipeline will halt before exceeding the configured invocation count or wall-clock time limit.
 - **Checkpointing**: Every completed stage is persisted to SQLite. A crashed run can be resumed from the last checkpoint.
 - **Validation gates**: When `--enforce-paper-artifacts` or `--enforce-editorial-artifacts` are enabled, the pipeline will not report success unless the specified artifacts exist and pass structural checks.
 
@@ -144,9 +146,9 @@ Runs are resumable through LangGraph checkpoints (`checkpoints.db`) and can be s
 
 1. **No ground-truth verification**: The pipeline has no oracle for scientific truth. Quality gates check structural completeness (file exists, score above threshold), not factual accuracy.
 2. **Reviewer score is not calibrated**: `--min-review-score 8` means "the LLM reviewer assigned 8/10," not "this paper has an 80% chance of acceptance." The score distribution depends on the model, prompt, and paper domain.
-3. **Experiment execution has no OS-level sandboxing**: `RunExperimentTool` launches AI-Scientist-v2 as a subprocess on the host (or via SLURM). There is no Docker container, cgroup, or resource-limit enforcement beyond a configurable timeout. See [Experiment Execution Safety Model](#experiment-execution-safety-model).
+3. **Experiment execution has no OS-level sandboxing**: `RunExperimentTool` launches the experiment runner as a subprocess on the host (or via SLURM). There is no Docker container, cgroup, or resource-limit enforcement beyond a configurable timeout. See [Experiment Execution Safety Model](#experiment-execution-safety-model).
 4. **Single-run stochasticity**: The pipeline is a fixed workflow graph (stages always execute in the same order), but LLM outputs are non-deterministic. "Fixed workflow graph" refers to the execution topology, not output reproducibility.
-5. **Budget tracking is best-effort**: Token-to-cost conversion depends on provider pricing tables embedded in litellm. Actual billed amounts may differ.
+5. **Budget tracking is best-effort**: Invocation counts and wall-clock time are tracked internally. Actual subscription usage may differ depending on provider-side accounting.
 6. **LaTeX compilation failures**: The writeup agent generates LaTeX that may not compile on first attempt. The revision loop retries, but complex papers may require manual fixup.
 
 ## How the Pipeline Works
@@ -156,27 +158,27 @@ Runs are resumable through LangGraph checkpoints (`checkpoints.db`) and can be s
 The pipeline is a persona-council-driven LangGraph workflow with feedback loops at multiple stages for self-correction. It executes in six phases:
 
 **1. Discovery (Persona Council)**
-- `persona_council` — evaluates the research direction from three critical lenses (practical compass, rigor/novelty, narrative architect) via multi-round debate
+- `persona_council` -- evaluates the research direction from three critical lenses (practical compass, rigor/novelty, narrative architect) via multi-round debate
 - `literature_review_agent`
-- `lit_review_gate` — feasibility check; loops back to `persona_council` if infeasible
+- `lit_review_gate` -- feasibility check; loops back to `persona_council` if infeasible
 - `brainstorm_agent`
-- `formalize_goals_entry` — entry gate that prepares state for goal formalization
+- `formalize_goals_entry` -- entry gate that prepares state for goal formalization
 - `formalize_goals_agent`
-- `research_plan_writeup_agent` — drafts a structured research plan
-- `track_decomposition_gate` — validates and writes `track_decomposition.json`
-- `milestone_goals` — milestone gate (pauses for human input when milestone gates are enabled)
+- `research_plan_writeup_agent` -- drafts a structured research plan
+- `track_decomposition_gate` -- validates and writes `track_decomposition.json`
+- `milestone_goals` -- milestone gate (pauses for human input when milestone gates are enabled)
 
 **2. Parallel Track Execution**
 - **Theory track** (when `--enable-math-agents` is enabled and the planner selects theory work):
   - `math_literature_agent`
   - `math_proposer_agent`
-  - `goal_tag_validation_gate` — validates claim graph tags before proving
+  - `goal_tag_validation_gate` -- validates claim graph tags before proving
   - `math_prover_agent`
   - `math_rigorous_verifier_agent`
-  - `human_review_gate` — optional pause for human review of proofs
+  - `human_review_gate` -- optional pause for human review of proofs
   - `math_empirical_verifier_agent`
   - `proof_transcription_agent`
-  - `theory_track_repair_gate` — can loop back to `math_prover_agent` for repair passes
+  - `theory_track_repair_gate` -- can loop back to `math_prover_agent` for repair passes
 - **Experiment track** (when the planner selects empirical work):
   - `experiment_literature_agent`
   - `experiment_design_agent`
@@ -186,21 +188,21 @@ The pipeline is a persona-council-driven LangGraph workflow with feedback loops 
 
 **3. Completion Verification**
 - `track_merge`
-- `verify_completion` — three-way routing: complete (proceed), incomplete (loop to `formalize_goals_agent`), rethink (loop to `brainstorm_agent`)
+- `verify_completion` -- three-way routing: complete (proceed), incomplete (loop to `formalize_goals_agent`), rethink (loop to `brainstorm_agent`)
 
 **4. Results Formalization and Quality Check**
 - `formalize_results_agent`
-- `duality_check` — internal consistency check (`--no-duality-check` to skip)
-- `duality_gate` — pass proceeds to paper production; fail loops to `brainstorm_agent` via `followup_lit_review`
+- `duality_check` -- internal consistency check (`--no-duality-check` to skip)
+- `duality_gate` -- pass proceeds to paper production; fail loops to `brainstorm_agent` via `followup_lit_review`
 
 **5. Paper Production and Final QA**
 - `resource_preparation_agent`
 - `writeup_agent`
-- `proofreading_entry` — entry gate that prepares state for proofreading
+- `proofreading_entry` -- entry gate that prepares state for proofreading
 - `proofreading_agent`
 - `reviewer_agent`
-- `milestone_review` — milestone gate (pauses for human review of the paper when enabled)
-- `validation_gate` — routes to END on pass; can loop back to `writeup_agent`, `experiment_track`, or `theory_track` on fail
+- `milestone_review` -- milestone gate (pauses for human review of the paper when enabled)
+- `validation_gate` -- routes to END on pass; can loop back to `writeup_agent`, `experiment_track`, or `theory_track` on fail
 
 ```mermaid
 flowchart TD
@@ -262,15 +264,15 @@ flowchart TD
 
 If no execution tracks are selected, the graph falls through directly to `track_merge`, then continues through verify-completion.
 
-**Counsel mode** (`--enable-counsel`): Nodes with dashed purple borders run multi-model debate when counsel is enabled. Each specialist node runs three independent model executions (Opus, GPT-5.4, Gemini 3 Pro Preview), then a debate + synthesis round before promoting consensus artifacts. See [Counsel Mode](#counsel-mode-multi-model-debate).
+**Counsel mode** (`--enable-counsel`): Nodes with dashed purple borders run multi-model debate when counsel is enabled. Each specialist node runs three independent CLI agent executions (claude, codex, gemini), then a debate + synthesis round before promoting consensus artifacts. See [Counsel Mode](#counsel-mode-multi-model-debate).
 
-**Tree search** (`--enable-tree-search`): In the theory track, the linear `MathProver` stage is replaced by a tree search controller that explores multiple proof strategies in parallel via DAG-layered best-first search. See [Agentic Tree Search](#agentic-tree-search).
+**Tree search** (`--enable-tree-search`): In the theory track, the linear `MathProver` stage is replaced by a tree search controller that explores multiple proof strategies in parallel via DAG-layered best-first search. Internally, each branch invokes `cli_completion()` for LLM reasoning. See [Agentic Tree Search](#agentic-tree-search).
 
 **Pipeline-specific CLI flags**:
-- `--persona-debate-rounds N` — number of debate rounds in persona council (default: 3)
-- `--no-duality-check` — skip the duality check gate (formalize results goes directly to paper production)
-- `--adversarial-verification` — run a hostile red-team verifier after cooperative verifiers pass
-- `--no-steering` — disable TCP/HTTP live-steering sockets (for Docker or restricted environments)
+- `--persona-debate-rounds N` -- number of debate rounds in persona council (default: 3)
+- `--no-duality-check` -- skip the duality check gate (formalize results goes directly to paper production)
+- `--adversarial-verification` -- run a hostile red-team verifier after cooperative verifiers pass
+- `--no-steering` -- disable TCP/HTTP live-steering sockets (for Docker or restricted environments)
 
 ## Quick Start
 
@@ -279,11 +281,12 @@ From the repository root:
 ```bash
 ./scripts/bootstrap.sh researchlab full
 conda activate researchlab
-cp .env.example .env
-# Edit .env and add at least one API key
+
+# Install at least one CLI agent tool (see Installation for details)
+# Then validate:
 python scripts/preflight_check.py --with-docs --with-web --with-experiment --with-latex
 
-# Recommended first run (single-model, lower cost):
+# Recommended first run (single-backend):
 python launch_multiagent.py \
   --task "Investigate this topic and produce a paper draft with evidence-backed claims." \
   --output-format markdown \
@@ -299,7 +302,7 @@ Artifacts are written to `results/consortium_<timestamp>/`.
 
 - macOS or Linux
 - Conda (Miniconda or Anaconda)
-- At least one LLM API key
+- At least one CLI agent tool installed: `claude`, `codex`, and/or `gemini`
 
 ### Standard Bootstrap
 
@@ -335,26 +338,25 @@ This installs the core runtime without running bootstrap scripts. You must also 
 cp .llm_config.yaml.example .llm_config.yaml
 ```
 
-### API Keys (`.env`)
+### CLI Agent Tools
 
-Copy `.env.example` to `.env` and fill the providers you use:
+Install at least one CLI agent backend. These are the tools the pipeline shells out to for LLM completions (via `cli_completion.py` and `cli_agent.py`):
 
 ```bash
-OPENAI_API_KEY=your_openai_api_key_here
-# ANTHROPIC_API_KEY=your_anthropic_api_key_here
-# GOOGLE_API_KEY=your_google_api_key_here
-# OPENROUTER_API_KEY=your_openrouter_api_key_here
-# DEEPSEEK_API_KEY=your_deepseek_api_key_here
-# XAI_API_KEY=your_xai_api_key_here
-# SERPER_API_KEY=your_serper_api_key_here
-# SEARXNG_INSTANCE_URL=https://your-searxng-instance
+# Claude (Anthropic) -- requires a Claude Max or Team subscription
+npm install -g @anthropic-ai/claude-code
+claude auth login
+
+# Codex (OpenAI) -- requires a ChatGPT Pro or Plus subscription
+npm install -g @openai/codex
+# Authenticate per codex docs
+
+# Gemini (Google) -- requires a Gemini Advanced subscription
+npm install -g @anthropic-ai/gemini-cli
+# Authenticate per gemini-cli docs
 ```
 
-Counsel mode requires:
-
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GOOGLE_API_KEY`
+Counsel mode requires all three CLI tools (`claude`, `codex`, `gemini`) to be installed and authenticated.
 
 ### Preflight Validation
 
@@ -366,9 +368,9 @@ Remove flags for capabilities you did not install.
 
 ## Configuration
 
-### Model Selection Precedence
+### Backend Selection Precedence
 
-Model settings are resolved in this order:
+Backend and model settings are resolved in this order:
 
 1. Built-in defaults in `consortium/runner.py` (fallback if no config found)
 2. `.llm_config.yaml`
@@ -376,14 +378,18 @@ Model settings are resolved in this order:
 
 ### `.llm_config.yaml` (Current Repository Defaults)
 
-Default values shipped in `.llm_config.yaml`:
-
-- `main_agents.model`: `claude-sonnet-4-6`
-- `main_agents.reasoning_effort`: `high`
-- `main_agents.budget_tokens`: `128000` (extended thinking)
-- `budget.usd_limit`: `25` (safe default; increase for production runs)
-- `counsel.enabled`: `false` (requires 3 API providers; enable after setup)
-- `per_agent_models.enabled`: `false` (all agents use the main model)
+```yaml
+default_backend: claude          # CLI backend: claude | codex | gemini
+default_model: claude-sonnet-4-6 # model passed to the CLI backend
+timeout_seconds: 300             # per-invocation timeout
+budget:
+  max_invocations: 200           # max CLI agent invocations per run
+  max_wall_clock_seconds: 7200   # hard wall-clock limit for the entire run
+counsel:
+  enabled: false                 # requires all 3 CLI tools; enable after setup
+per_agent_models:
+  enabled: false                 # all agents use the default backend/model
+```
 
 Counsel precedence:
 
@@ -393,15 +399,15 @@ Counsel precedence:
 
 ### Supported `--model` Values
 
-From `consortium/utils.py`:
+The `--model` flag selects the model identifier passed to the active CLI backend. Common values:
 
-- OpenAI: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.2`, `gpt-5.4`, `gpt-5.3-codex`, `gpt-4o`, `gpt-4.1-mini-2025-04-14`, `o4-mini-2025-04-16`, `o3-2025-04-16`, `o3-pro-2025-06-10`
-- Anthropic: `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-opus-4-20250514`, `claude-sonnet-4-20250514`, `claude-sonnet-4-5`, `claude-sonnet-4-5-20250929`
-- Google: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro-preview`
-- DeepSeek: `deepseek-chat`, `deepseek-coder`
-- xAI: `grok-4-0709`
+- **claude backend**: `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-sonnet-4-5`
+- **codex backend**: `gpt-5`, `gpt-5.4`, `o3-2025-04-16`, `gpt-4o`
+- **gemini backend**: `gemini-2.5-pro`, `gemini-3-pro-preview`, `gemini-2.5-flash`
 
-### Budget and Token Tracking
+The backend determines which CLI tool is invoked; the model flag is forwarded to that tool. Any model string accepted by the underlying CLI tool will work.
+
+### Budget and Invocation Tracking
 
 Budget files in each workspace:
 
@@ -409,17 +415,12 @@ Budget files in each workspace:
 - `budget_ledger.jsonl`
 - `budget.lock` (present when cap is reached)
 
-Token files:
+The budget system tracks:
 
-- `run_token_usage.json`
-- `.local/private_token_usage/api_token_calls.jsonl`
-- `.local/private_token_usage/api_token_calls.txt`
+- **Invocation count**: number of CLI agent calls made during the run
+- **Wall-clock time**: elapsed time since the run started
 
-Export private report:
-
-```bash
-python scripts/export_private_token_report.py
-```
+These replace per-token USD cost tracking. Since CLI agent tools are included in subscription plans (Claude Max, ChatGPT Pro, Gemini Advanced, etc.), there are no per-token costs to track.
 
 ### Useful Environment Variables
 
@@ -474,7 +475,7 @@ python launch_multiagent.py \
   --require-pdf
 ```
 
-Counsel runs are much more expensive (roughly 5-6x per specialist stage).
+Counsel runs use all three CLI backends in parallel (claude + codex + gemini) and are significantly slower per specialist stage.
 
 ### Run with Tree Search (Parallel Proof Strategies)
 
@@ -501,7 +502,7 @@ python launch_multiagent.py \
   --require-pdf
 ```
 
-Tree search with counsel at every node is the most expensive configuration (~15-20x per-claim cost vs. baseline).
+Tree search with counsel at every node is the most resource-intensive configuration.
 
 ### Maximum Quality (All Features)
 
@@ -766,7 +767,7 @@ flowchart LR
 
 **Phase 1 (Plan)**: Claude Code runs in read-only mode (`--permission-mode plan`) with only `Read`, `Glob`, `Grep`, and `Bash` tools. It produces a structured diagnosis and repair plan.
 
-**Plan Review**: An LLM judge (via litellm) scores the plan on 5 dimensions (correctness, completeness, safety, minimality, feasibility). Plans scoring below `min_review_score` (default 7/10) are rejected.
+**Plan Review**: An LLM judge (via `cli_completion()`) scores the plan on 5 dimensions (correctness, completeness, safety, minimality, feasibility). Plans scoring below `min_review_score` (default 7/10) are rejected.
 
 **Phase 2 (Execute)**: If approved, Claude Code runs with full access (`--permission-mode bypassPermissions`) to implement the approved plan.
 
@@ -783,14 +784,14 @@ repair:
   effort: max                   # maximum thinking effort
   two_phase: true               # plan→review→execute flow
   min_review_score: 7           # plan must score >= 7/10 to proceed
-  budget_usd: 10.0              # per-attempt spend cap
+  max_invocations: 50           # per-attempt invocation cap
 ```
 
 Full configuration schema is in `consortium/campaign/spec.py` (`RepairConfig` dataclass).
 
 ### Circuit Breakers
 
-The campaign system includes several circuit breakers to prevent death loops — situations where the heartbeat keeps ticking (burning API credits) without making progress.
+The campaign system includes several circuit breakers to prevent death loops -- situations where the heartbeat keeps ticking without making progress.
 
 | Circuit Breaker | Config Field | Default | Behavior |
 |---|---|---|---|
@@ -801,7 +802,7 @@ The campaign system includes several circuit breakers to prevent death loops —
 | **Review failure cap** | `repair.max_review_failures` | `3` | After N consecutive LLM review failures, plans are rejected instead of auto-approved. Prevents unreviewed repairs from executing repeatedly. |
 | **Counsel model timeout** | `counsel_model_timeout_seconds` | `600` | Per-model timeout for counsel sandbox and debate phases. Models that exceed this are skipped with a timeout label. |
 | **Escalation timeout** | `repair.escalation_timeout_minutes` | `60` | If a failed stage sits with repair exhausted for longer than this, the repair attempt counter is reset and repair retries with a fresh budget. Controlled by `auto_retry_on_timeout`. |
-| **Artifact content validation** | `artifact_validators` (per-stage) | — | Validates artifact content beyond file existence: `min_size_bytes`, `must_contain`, `must_not_contain`. Detects hollow artifacts (e.g., `"status": "not_executed"`). |
+| **Artifact content validation** | `artifact_validators` (per-stage) | -- | Validates artifact content beyond file existence: `min_size_bytes`, `must_contain`, `must_not_contain`. Detects hollow artifacts (e.g., `"status": "not_executed"`). |
 
 Configuration example (`campaign_v2.yaml`):
 
@@ -829,27 +830,27 @@ stages:
 
 ### Memory Distillation
 
-After each stage completes, `distill_stage_memory()` reads key output files from the workspace and writes a concise markdown summary to `campaign_dir/memory/<stage_id>_summary.md`. The summary includes excerpts of required artifacts (up to 4000 chars each), files from `memory_dirs` (up to 1500 chars, 20 files max), budget totals, token counts, and pipeline status.
+After each stage completes, `distill_stage_memory()` reads key output files from the workspace and writes a concise markdown summary to `campaign_dir/memory/<stage_id>_summary.md`. The summary includes excerpts of required artifacts (up to 4000 chars each), files from `memory_dirs` (up to 1500 chars, 20 files max), invocation counts, and pipeline status.
 
-This summary is automatically prepended to the next stage's task prompt via `context_from`, giving downstream agents cross-stage context without inflating their full context windows. Controlled by the `memory_dirs` and `context_from` fields in stage definitions — see [`OpenClaw_Use_Guide.md`](OpenClaw_Use_Guide.md) for details.
+This summary is automatically prepended to the next stage's task prompt via `context_from`, giving downstream agents cross-stage context without inflating their full context windows. Controlled by the `memory_dirs` and `context_from` fields in stage definitions -- see [`OpenClaw_Use_Guide.md`](OpenClaw_Use_Guide.md) for details.
 
 ### Campaign Budget Management
 
-`CampaignBudgetManager` tracks total spend across all stages by summing per-stage `budget_state.json` files. As the campaign approaches its budget limit, the manager recommends progressively reduced rigor levels to prevent budget exhaustion before completion.
+`CampaignBudgetManager` tracks total invocations across all stages by summing per-stage `budget_state.json` files. As the campaign approaches its invocation limit, the manager recommends progressively reduced rigor levels to prevent budget exhaustion before completion.
 
-| Rigor Level | Counsel Models | Debate Rounds | Tree Breadth | Budget Spent |
+| Rigor Level | Counsel Backends | Debate Rounds | Tree Breadth | Budget Spent |
 |---|---|---|---|---|
-| `maximum` | 4 (all frontier) | 3 | 3 | < 50% |
-| `high` | 4 | 2 | 2 | 50–70% |
-| `standard` | 2 (Opus + Sonnet) | 2 | 2 | 70–85% |
-| `reduced` | 1 (Opus only) | 0 | 1 (linear) | 85–95% |
+| `maximum` | 3 (all CLI backends) | 3 | 3 | < 50% |
+| `high` | 3 | 2 | 2 | 50-70% |
+| `standard` | 2 (claude + codex) | 2 | 2 | 70-85% |
+| `reduced` | 1 (claude only) | 0 | 1 (linear) | 85-95% |
 | `minimal` | 0 (no counsel) | 0 | 1 | >= 95% |
 
 Profiles are defined in `consortium/campaign/budget_manager.py` (`DEGRADATION_PROFILES`). Each profile also controls compute tier, adversarial verification, and milestone PDF generation.
 
 ### Notifications
 
-The campaign heartbeat dispatches push notifications on stage launch, completion, failure, repair attempts, and (optionally) every heartbeat tick. All channels are optional and notification failures are silently swallowed — they never crash the campaign.
+The campaign heartbeat dispatches push notifications on stage launch, completion, failure, repair attempts, and (optionally) every heartbeat tick. All channels are optional and notification failures are silently swallowed -- they never crash the campaign.
 
 | Channel | Config field | Notes |
 |---|---|---|
@@ -879,7 +880,7 @@ flowchart LR
     theory2 -->|"depends_on + context_from"| paper
 ```
 
-`depends_on` is an ordering gate — the downstream stage will not launch until all listed stages are `completed`. `context_from` additionally resumes the upstream workspace and injects its memory summary into the task prompt.
+`depends_on` is an ordering gate -- the downstream stage will not launch until all listed stages are `completed`. `context_from` additionally resumes the upstream workspace and injects its memory summary into the task prompt.
 
 ### HTTP Steering Quick Reference
 
@@ -898,9 +899,9 @@ curl -s http://127.0.0.1:5002/status
 
 ### SLURM / HPC Deployment
 
-The heartbeat uses configurable circuit breakers (`max_idle_ticks`, `max_campaign_hours`) to detect and halt stuck campaigns — see [Circuit Breakers](#circuit-breakers) below.
+The heartbeat uses configurable circuit breakers (`max_idle_ticks`, `max_campaign_hours`) to detect and halt stuck campaigns -- see [Circuit Breakers](#circuit-breakers) below.
 
-All cluster-specific settings — partitions, GPU types, conda paths, module loads — are centralized in `engaging_config.yaml`. The heartbeat runs on a CPU partition; experiment GPU jobs and repair agents are submitted as separate SLURM jobs.
+All cluster-specific settings -- partitions, GPU types, conda paths, module loads -- are centralized in `engaging_config.yaml`. The heartbeat runs on a CPU partition; experiment GPU jobs and repair agents are submitted as separate SLURM jobs.
 
 ```bash
 # Submit a stage as a SLURM job
@@ -925,8 +926,8 @@ Use `python launch_multiagent.py --help` for full output.
 | `--debug` | `false` | Enable debug logging |
 | `--log-to-files` | env-driven | Force stdout/stderr redirection to `logs/` |
 | `--no-log-to-files` | env-driven | Disable file redirection |
-| `--reasoning-effort` | `None` | GPT-5 reasoning level (`none\|minimal\|low\|medium\|high\|xhigh`) |
-| `--verbosity` | `None` | GPT-5 verbosity (`low\|medium\|high`) |
+| `--reasoning-effort` | `None` | Reasoning level (`none\|minimal\|low\|medium\|high\|xhigh`) |
+| `--verbosity` | `None` | Verbosity (`low\|medium\|high`) |
 | `--callback_host` | `127.0.0.1` | Interrupt socket host |
 | `--callback_port` | `5001` | Interrupt socket port (HTTP is `port + 1`) |
 | `--resume` | `None` | Resume existing workspace |
@@ -942,7 +943,7 @@ Use `python launch_multiagent.py --help` for full output.
 | `--enable-counsel` | `false` | Force-enable multi-model counsel |
 | `--no-counsel` | `false` | Force-disable counsel |
 | `--counsel-max-debate-rounds` | `None` (effective `3`) | Override counsel debate rounds |
-| `--max-rebuttal-iterations` | `2` | Max reviewer → writeup rebuttal loops |
+| `--max-rebuttal-iterations` | `2` | Max reviewer to writeup rebuttal loops |
 | `--persona-debate-rounds` | `None` (effective `3`) | Number of debate rounds in persona council |
 | `--no-duality-check` | `false` | Disable duality check gate |
 | `--adversarial-verification` | `false` | Enable hostile red-team verifier for claims |
@@ -955,7 +956,7 @@ Use `python launch_multiagent.py --help` for full output.
 | `--enable-milestone-gates` | `false` | Pause at strategic milestones and wait for human input via HTTP |
 | `--milestone-timeout` | `3600` | Seconds to wait for human response at milestone gates before auto-proceeding |
 | `--autonomous-mode` | `true` | Run fully autonomously with no human-in-the-loop gates |
-| `--no-autonomous-mode` | — | Enable milestone gates and human approval checkpoints |
+| `--no-autonomous-mode` | -- | Enable milestone gates and human approval checkpoints |
 | `--max-run-seconds` | `None` | Hard timeout for the entire pipeline run (SIGALRM kill) |
 | `--dry-run` | `false` | Validate setup without running pipeline |
 | `--no-steering` | `false` | Disable TCP/HTTP live-steering sockets (for Docker, containers, shared servers) |
@@ -1020,17 +1021,15 @@ results/consortium_YYYYMMDD_HHMMSS/
     lemma_library.md
   counsel_sandboxes/                 # when counsel is enabled
     <agent_name>/
-      model_0_claude-opus-4-6/
-      model_1_claude-sonnet-4-6/
-      model_2_gpt-5.4/
-      model_3_gemini-3-pro-preview/
+      model_0_claude/
+      model_1_codex/
+      model_2_gemini/
   tree_search_state.json             # when --enable-tree-search
   tree_branches/                     # when --enable-tree-search
     <branch_id>/                     # forked workspace per branch
   inter_agent_messages/
-  run_token_usage.json
-  budget_state.json                  # when budget is configured
-  budget_ledger.jsonl                # when budget is configured
+  budget_state.json                  # invocation count + wall-clock time
+  budget_ledger.jsonl                # per-call invocation log
   checkpoints.db
   memory_backup/
     full_conversation_backup.jsonl
@@ -1044,7 +1043,7 @@ What to inspect first:
 3. `experiment_workspace/experiment_design.json` and `experiment_workspace/verification_results.json`
 4. `paper_workspace/followup_decision.json`
 5. `math_workspace/claim_graph.json` and `math_workspace/checks/*.jsonl` (if math enabled)
-6. `run_token_usage.json` and `budget_ledger.jsonl`
+6. `budget_state.json` and `budget_ledger.jsonl`
 
 ## Quality Gates and Artifact Contracts
 
@@ -1118,18 +1117,21 @@ PoggioAI/MSc produces a paper draft, not a submission-ready manuscript. Before s
 Core orchestration:
 
 - `launch_multiagent.py`: thin entry point
-- `consortium/runner.py`: run lifecycle, config loading, model/counsel/tree-search setup, workspace/checkpoint initialization, execution
+- `consortium/runner.py`: run lifecycle, config loading, backend/counsel/tree-search setup, workspace/checkpoint initialization, execution
+- `consortium/cli_completion.py`: unified interface for shelling out to CLI agent tools (claude, codex, gemini); all LLM completions go through this module
+- `consortium/cli_agent.py`: CLI-agent-based agent wrapper used by specialist nodes; replaces direct API calls with subprocess invocations of CLI tools
+- `consortium/experiment_runner.py`: lightweight 4-stage experiment loop (design, implement, execute, analyze) driven by CLI agents; replaces the former AI-Scientist-v2 integration
 - `consortium/utils.py`: model factory and model registry helpers
 - `consortium/graph.py`: direct-wired LangGraph pipeline definition, track router, gates (lit-review, verify-completion, duality, follow-up, validation), and theory/experiment subgraph builders
 - `consortium/state.py`: `ResearchState` schema, including `track_decomposition`, track status fields, tree search state, and cycle counters
 - `consortium/models.py`: canonical model registry with context limits and provider mappings
 - `consortium/workflow_utils.py`: shared follow-up parsing, required-artifact construction, and validation helpers
-- `consortium/counsel.py`: multi-model sandbox/debate/synthesis
+- `consortium/counsel.py`: multi-model sandbox/debate/synthesis (runs claude + codex + gemini CLI tools in parallel)
 - `consortium/supervision/`: artifact/review/traceability validators
 
 Major package areas:
 
-- `consortium/agents/`: 23 specialist agent implementations, base agent factory, and track merge node
+- `consortium/agents/`: 23 specialist agent implementations, base agent factory (via `cli_agent.py`), and track merge node
 - `consortium/toolkits/search/`: arXiv/web/search/document inspection tools (including Open Deep Search with web scraping, reranking, and SERP integration)
 - `consortium/toolkits/experimentation/`: experiment execution helpers (including SLURM job submission)
 - `consortium/toolkits/writeup/`: LaTeX generation/compilation/reflection, citation search, data visualization (comparison plots, training analysis, statistical analysis, multi-panel composition), and VLM document analysis
@@ -1137,10 +1139,10 @@ Major package areas:
 - `consortium/toolkits/filesystem/`: file editing, knowledge base repo management and indexing
 - `consortium/toolkits/ideation/`: idea generation, refinement, novelty checking, paper search
 - `consortium/toolkits/communication/`: user messaging
-- `consortium/tree_search/`: agentic tree search — DAG-layered best-first search for parallel proof strategies in the theory track (see [Agentic Tree Search](#agentic-tree-search))
+- `consortium/tree_search/`: agentic tree search -- DAG-layered best-first search for parallel proof strategies in the theory track (see [Agentic Tree Search](#agentic-tree-search))
 - `consortium/campaign/`: autonomous multi-stage campaign engine (spec, runner, memory, status, notifications, budget management, autonomous repair agent)
 - `consortium/interaction/`: TCP + HTTP steering
-- `consortium/external_tools/`: AI Scientist v2 integration for experiment execution
+- `consortium/external_tools/`: experiment execution integration
 
 Notable agent groups:
 
@@ -1171,63 +1173,63 @@ python scripts/lemma_library_cli.py --workspace /absolute/path/to/results/consor
 
 ## Runtime and Cost Expectations
 
-Runtime and spend depend on task scope, enabled gates, model choice, and revision loops.
+Runtime depends on task scope, enabled gates, backend choice, and revision loops. All CLI agent invocations are included in your subscription plan (Claude Max, ChatGPT Pro, Gemini Advanced, etc.) -- there are no per-token costs.
 
-| Configuration | Typical Cost | Typical Runtime | Notes |
+| Configuration | Typical Invocations | Typical Runtime | Notes |
 |---|---|---|---|
-| Quickstart (markdown, no counsel) | $2–10 | 15–40 min | Single model, ArXiv only |
-| Base pipeline + LaTeX PDF | $10–40 | 30–90 min | Requires pdflatex installed |
-| Base pipeline + math agents | $20–60 | 60–150 min | Adds 6 math stages |
-| Counsel mode (4-model debate) | $50–200 | 2–5 hrs | Requires 3 API keys |
-| Tree search (no counsel) | $60–180 | 2–4 hrs | ~3x per claim (max_breadth=3) |
-| Tree search + counsel (all nodes) | $200–600 | 4–10 hrs | ~15-20x per claim; maximum quality |
-| Full paper campaign (3 stages) | $100–400 | 6–12 hrs | Via OpenClaw orchestration |
+| Quickstart (markdown, no counsel) | 20-60 | 15-40 min | Single backend |
+| Base pipeline + LaTeX PDF | 60-150 | 30-90 min | Requires pdflatex installed |
+| Base pipeline + math agents | 100-250 | 60-150 min | Adds 6 math stages |
+| Counsel mode (3-backend debate) | 200-600 | 2-5 hrs | Requires all 3 CLI tools |
+| Tree search (no counsel) | 200-500 | 2-4 hrs | ~3x per claim (max_breadth=3) |
+| Tree search + counsel (all nodes) | 500-1500 | 4-10 hrs | Maximum quality |
+| Full paper campaign (3 stages) | 300-800 | 6-12 hrs | Via OpenClaw orchestration |
 
-> **Budget cap**: The default `.llm_config.yaml` cap is $25. Increase `budget.usd_limit` for production campaigns.
+> **Budget cap**: The default `.llm_config.yaml` cap is 200 invocations and 7200 seconds wall-clock time. Increase `budget.max_invocations` and `budget.max_wall_clock_seconds` for production campaigns.
 
 For counsel-heavy runs, monitor:
 
-- `run_token_usage.json` — token counts by model
-- `budget_ledger.jsonl` — per-call cost log
-- `run_summary.json` — final cost/token summary written at completion
+- `budget_state.json` -- invocation counts by backend
+- `budget_ledger.jsonl` -- per-call invocation log
+- `run_summary.json` -- final invocation/time summary written at completion
 
 ## Counsel Mode (Multi-Model Debate)
 
-Counsel mode (`--enable-counsel`) replaces single-model execution at each pipeline stage with a parallel multi-model debate and synthesis protocol.
+Counsel mode (`--enable-counsel`) replaces single-backend execution at each pipeline stage with a parallel multi-backend debate and synthesis protocol.
 
-### Participating Models
+### Participating Backends
 
-By default, three frontier models run independently, with a separate synthesis model:
+By default, three CLI agent backends run independently, with a separate synthesis backend:
 
-| Slot | Model | Provider | Notes |
-|------|-------|----------|-------|
-| 0 | `claude-opus-4-6` | Anthropic | `reasoning_effort=high` |
-| 1 | `gpt-5.4` | OpenAI | `reasoning_effort=high` |
-| 2 | `gemini-3-pro-preview` | Google | `thinking_budget=65536` |
-| synthesis | `claude-opus-4-6` | Anthropic | Reviews all solutions and debate rounds |
+| Slot | Backend | CLI Tool | Notes |
+|------|---------|----------|-------|
+| 0 | claude | `claude` | Claude Max / Team subscription |
+| 1 | codex | `codex` | ChatGPT Pro / Plus subscription |
+| 2 | gemini | `gemini` | Gemini Advanced subscription |
+| synthesis | claude | `claude` | Reviews all solutions and debate rounds |
 
-Custom model specs can be set in `.llm_config.yaml` under `counsel.models`.
+Custom backend specs can be set in `.llm_config.yaml` under `counsel.models`.
 
 ### Debate Protocol
 
 Each pipeline stage runs through four phases:
 
-1. **Sandbox phase** (parallel): Each model receives the same task and system prompt but works in an isolated copy of the workspace (`counsel_sandboxes/<agent>/<model>/`). All three models execute simultaneously via `ThreadPoolExecutor`.
-2. **Debate phase** (parallel per round): After all sandbox runs complete, each model critiques all three solutions. This runs for `max_debate_rounds` rounds (default: 3, configurable via `--counsel-max-debate-rounds` or `CONSORTIUM_COUNSEL_MAX_DEBATE_ROUNDS`). Each round's critiques run in parallel.
-3. **Synthesis phase**: The synthesis model (default: `claude-opus-4-6`, configurable in `.llm_config.yaml`) reviews all solutions and all debate rounds, then produces a single authoritative output for the stage.
+1. **Sandbox phase** (parallel): Each CLI backend receives the same task and system prompt but works in an isolated copy of the workspace (`counsel_sandboxes/<agent>/<backend>/`). All three backends execute simultaneously via `ThreadPoolExecutor`.
+2. **Debate phase** (parallel per round): After all sandbox runs complete, each backend critiques all three solutions. This runs for `max_debate_rounds` rounds (default: 3, configurable via `--counsel-max-debate-rounds` or `CONSORTIUM_COUNSEL_MAX_DEBATE_ROUNDS`). Each round's critiques run in parallel.
+3. **Synthesis phase**: The synthesis backend (default: `claude`, configurable in `.llm_config.yaml`) reviews all solutions and all debate rounds, then produces a single authoritative output for the stage.
 4. **Artifact promotion**: Files from each sandbox are merged into the main workspace. Later sandboxes win on file-level conflicts (last-write-wins).
 
 ### When to Use Counsel
 
-- Use counsel when quality matters more than cost (e.g., final paper runs, important campaigns).
+- Use counsel when quality matters more than time (e.g., final paper runs, important campaigns).
 - Counsel helps most on stages where model disagreement reveals weaknesses: literature review, experiment design, writeup.
-- Skip counsel (`--no-counsel`) for iterative development, quickstart runs, or cost-sensitive exploration.
+- Skip counsel (`--no-counsel`) for iterative development, quickstart runs, or time-sensitive exploration.
 
-### Cost and Performance Impact
+### Performance Impact
 
-- Counsel multiplies per-stage cost by roughly 4-5x (3 independent model runs + 3 rounds of 3 debate calls + 1 synthesis call).
+- Counsel multiplies per-stage invocations by roughly 4-5x (3 independent backend runs + 3 rounds of 3 debate calls + 1 synthesis call).
 - Wall-clock time increases modestly because sandbox and debate phases run in parallel, but total runtime is still longer due to synthesis and sequential stage execution.
-- Requires API keys for all three providers: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`.
+- Requires all three CLI tools installed and authenticated: `claude`, `codex`, `gemini`.
 
 ### Counsel Precedence
 
@@ -1241,19 +1243,21 @@ Tree search (`--enable-tree-search`) replaces the linear proof stage in the theo
 
 Inspired by the AI Scientist-v2 progressive agentic tree search (paper 2504.08066v1), adapted for mathematical research where the claim graph imposes a DAG dependency structure. Tree search is scoped to the theory track (proof stage) because that is where the pipeline has a genuine combinatorial bottleneck: proofs are binary (valid or not), alternative strategies are well-defined, and the claim graph provides real prioritisation signal.
 
+Internally, each tree search branch invokes `cli_completion()` to obtain LLM reasoning for strategy generation, proof attempts, and branch scoring.
+
 ### How It Works
 
 The tree search controller operates in a **DAG-layered best-first** loop:
 
-1. **Identify frontier claims** — claims in the claim graph whose dependencies are all resolved
-2. **Generate proof strategies** — for each frontier claim, produce N alternative approaches (e.g., direct proof, contradiction, alternative lemma chain)
-3. **Score branches** — composite score: 40% LLM promise + 25% claim graph impact + 15% cost efficiency + 10% depth penalty + 10% sibling diversity
-4. **Execute top-K branches in parallel** — each branch runs in a forked workspace through the full prover → rigorous verifier → empirical verifier pipeline
-5. **Process results** — successful branches are promoted, failed branches spawn debugging children (up to `max_depth`), low-scoring branches are pruned
+1. **Identify frontier claims** -- claims in the claim graph whose dependencies are all resolved
+2. **Generate proof strategies** -- for each frontier claim, produce N alternative approaches (e.g., direct proof, contradiction, alternative lemma chain)
+3. **Score branches** -- composite score: 40% LLM promise + 25% claim graph impact + 15% cost efficiency + 10% depth penalty + 10% sibling diversity
+4. **Execute top-K branches in parallel** -- each branch runs in a forked workspace through the full prover -> rigorous verifier -> empirical verifier pipeline
+5. **Process results** -- successful branches are promoted, failed branches spawn debugging children (up to `max_depth`), low-scoring branches are pruned
 
 ### Integration Point
 
-Tree search hooks into the **theory track**, replacing the linear prover → verifier chain with a tree search controller that explores multiple proof strategies per claim in parallel.
+Tree search hooks into the **theory track**, replacing the linear prover -> verifier chain with a tree search controller that explores multiple proof strategies per claim in parallel.
 
 ### Tree Search Node Types
 
@@ -1270,19 +1274,19 @@ Tree search hooks into the **theory track**, replacing the linear prover → ver
 
 Tree search and counsel are orthogonal:
 
-- **Tree search** = same model, different tasks (explore N strategies in parallel)
-- **Counsel** = different models, same task (4-model debate per strategy)
+- **Tree search** = same backend, different tasks (explore N strategies in parallel)
+- **Counsel** = different backends, same task (3-backend debate per strategy)
 
 They compose: each tree branch can run the full counsel debate. `--tree-counsel-mode` controls when counsel runs within branches:
 
 | Mode | Behavior |
 |---|---|
-| `all_nodes` (default) | Every tree node gets full 4-model debate. Maximum quality. |
+| `all_nodes` (default) | Every tree node gets full 3-backend debate. Maximum quality. |
 | `final_only` | Only the winning branch runs counsel after tree selection. |
 | `by_depth` | Counsel at specified tree depths only. |
 | `by_node_type` | Counsel only on high-stakes node types (e.g., `PROOF_STRATEGY`). |
 
-With `max_breadth=3` and 4 counsel models, this means 12 parallel agent runs per claim at the proof stage.
+With `max_breadth=3` and 3 counsel backends, this means 9 parallel agent runs per claim at the proof stage.
 
 ### Module Structure
 
@@ -1306,8 +1310,8 @@ consortium/tree_search/
 
 When tree search is enabled, the workspace includes:
 
-- `tree_search_state.json` — serialized tree state (all nodes, scores, statuses)
-- `tree_branches/<branch_id>/` — forked workspace per branch
+- `tree_search_state.json` -- serialized tree state (all nodes, scores, statuses)
+- `tree_branches/<branch_id>/` -- forked workspace per branch
 
 ### Configuration
 
@@ -1326,11 +1330,11 @@ Tree search is off by default. Enable via CLI flags:
 
 ### What IS in Place
 
-- **Subprocess isolation**: `RunExperimentTool` launches AI-Scientist-v2 as a child process via `subprocess.run()`. Experiment code runs in a dedicated `experiment_runs/<uuid>/` directory, separate from the main workspace.
+- **Subprocess isolation**: `RunExperimentTool` launches the experiment runner (`experiment_runner.py`) as a child process via `subprocess.run()`. Experiment code runs in a dedicated `experiment_runs/<uuid>/` directory, separate from the main workspace. The experiment runner implements a lightweight 4-stage loop (design, implement, execute, analyze) driven by CLI agents.
 - **Timeout enforcement**: Local subprocess mode enforces `CONSORTIUM_EXPERIMENT_TIMEOUT` (default: 3600 seconds). If the experiment exceeds this, the subprocess is killed.
 - **SLURM mode** (when `CONSORTIUM_SLURM_ENABLED=1`): Experiments are submitted as SLURM batch jobs with configurable partition, time limit, GPU allocation, and memory. SLURM's own resource enforcement applies.
-- **Budget cap**: The overall USD budget limit prevents unbounded API spend during experiments.
-- **Input validation**: The tool validates that research ideas conform to AI-Scientist-v2's expected JSON schema before launching.
+- **Budget cap**: The overall invocation limit prevents unbounded CLI agent usage during experiments.
+- **Input validation**: The tool validates that research ideas conform to the expected JSON schema before launching.
 - **Docker support**: A `Dockerfile` and `docker-compose.yml` are provided for running the entire pipeline in a container, which provides filesystem and process isolation.
 
 ### What is NOT in Place
@@ -1349,7 +1353,7 @@ Tree search is off by default. Enable via CLI flags:
 
 ## Troubleshooting
 
-### `ModuleNotFoundError` (`yaml`, `litellm`, etc.)
+### `ModuleNotFoundError` (`yaml`, etc.)
 
 ```bash
 ./scripts/bootstrap.sh researchlab minimal
@@ -1388,11 +1392,17 @@ If conda TeX formats are broken:
 brew install ffmpeg
 ```
 
-### No API key detected
+### No CLI agent tool detected
 
-Check `.env` and shell environment variables (`OPENAI_API_KEY`, etc.).
+Verify that at least one CLI tool is installed and on your PATH:
 
-### Reduce citation retries / token burn
+```bash
+which claude || which codex || which gemini
+```
+
+If none is found, install one (see [CLI Agent Tools](#cli-agent-tools)).
+
+### Reduce citation retries
 
 ```bash
 export CONSORTIUM_SS_MAX_RETRIES=2
@@ -1417,7 +1427,7 @@ Planned metrics:
 - **Reviewer score distribution**: Histogram of `overall_score` values from the internal reviewer agent across a test suite of tasks.
 - **Citation accuracy**: Spot-check accuracy rate of generated `references.bib` entries against ground truth.
 - **Experiment reproducibility**: Rate at which generated experiments produce consistent results across repeated runs.
-- **Cost efficiency**: Median cost per completed paper draft across task categories.
+- **Invocation efficiency**: Median invocation count per completed paper draft across task categories.
 
 We will publish benchmark results here once a standardized evaluation suite is available.
 
@@ -1430,20 +1440,20 @@ pytest tests/
 
 Test modules:
 
-- `tests/test_validation.py` — artifact/review/traceability validators
-- `tests/test_config.py` — configuration loading and precedence
-- `tests/test_prereqs.py` — prerequisite checks
-- `tests/test_graph.py` — graph construction and routing
-- `tests/test_graph_config.py` — graph configuration and parameterization
-- `tests/test_parallel_graph.py` — parallel track execution
-- `tests/test_runner.py` — runner lifecycle
-- `tests/test_state.py` — state schema and reducers
-- `tests/test_budget.py` — budget tracking, ledger, lock files
-- `tests/test_counsel.py` — counsel model specs and imports
-- `tests/test_lit_review_gate.py` — literature review feasibility gate
-- `tests/test_track_decomposition_gate.py` — track decomposition validation
-- `tests/test_extract_verdict.py` — verdict extraction from agent outputs
-- `tests/test_deep_research_tool.py` — deep research tool integration
+- `tests/test_validation.py` -- artifact/review/traceability validators
+- `tests/test_config.py` -- configuration loading and precedence
+- `tests/test_prereqs.py` -- prerequisite checks
+- `tests/test_graph.py` -- graph construction and routing
+- `tests/test_graph_config.py` -- graph configuration and parameterization
+- `tests/test_parallel_graph.py` -- parallel track execution
+- `tests/test_runner.py` -- runner lifecycle
+- `tests/test_state.py` -- state schema and reducers
+- `tests/test_budget.py` -- budget tracking, ledger, lock files
+- `tests/test_counsel.py` -- counsel model specs and imports
+- `tests/test_lit_review_gate.py` -- literature review feasibility gate
+- `tests/test_track_decomposition_gate.py` -- track decomposition validation
+- `tests/test_extract_verdict.py` -- verdict extraction from agent outputs
+- `tests/test_deep_research_tool.py` -- deep research tool integration
 
 ## License
 

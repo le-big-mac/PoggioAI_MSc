@@ -12,9 +12,6 @@ from ..agents.base_agent import create_specialist_agent
 from ..prompts.math_proposer_instructions import get_math_proposer_system_prompt
 from ..toolkits.math.claim_graph_tool import MathClaimGraphTool
 from ..toolkits.math.proof_workspace_tool import MathProofWorkspaceTool
-from ..toolkits.filesystem.file_editing.file_editing_tools import (
-    CreateFileWithContent, DeleteFileOrFolder, ListDir, ModifyFile, SearchKeyword, SeeFile,
-)
 
 
 def get_tools(workspace_dir: Optional[str]) -> list:
@@ -22,15 +19,6 @@ def get_tools(workspace_dir: Optional[str]) -> list:
         MathClaimGraphTool(working_dir=workspace_dir, allow_accepted_transition=False),
         MathProofWorkspaceTool(working_dir=workspace_dir),
     ]
-    if workspace_dir:
-        tools += [
-            SeeFile(working_dir=workspace_dir),
-            CreateFileWithContent(working_dir=workspace_dir),
-            ModifyFile(working_dir=workspace_dir),
-            ListDir(working_dir=workspace_dir),
-            SearchKeyword(working_dir=workspace_dir),
-            DeleteFileOrFolder(working_dir=workspace_dir),
-        ]
     return tools
 
 
