@@ -1,0 +1,47 @@
+# Quick research campaign template.
+# Populated by scripts/quick_research.py — do not edit directly.
+# Placeholders: {{CAMPAIGN_NAME}}, {{CAMPAIGN_ID}}, {{TASK_FILE}}
+
+name: "{{CAMPAIGN_NAME}}"
+workspace_root: "results/{{CAMPAIGN_ID}}"
+
+heartbeat_interval_minutes: 15
+max_idle_ticks: 8
+max_campaign_hours: 8
+
+# Auto-generate stages from the research idea
+planning:
+  enabled: true
+  base_task_file: "{{TASK_FILE}}"
+  max_stages: 4
+  max_parallel: 1
+  human_review: false
+  planning_timeout_seconds: 600
+
+# Auto-fix failed stages
+repair:
+  enabled: true
+  max_attempts: 2
+  launcher: local
+  timeout_seconds: 600
+  two_phase: true
+  min_review_score: 7
+  allowed_actions:
+    - edit_code
+    - fix_config
+    - generate_missing_artifacts
+
+# Notifications (from env vars — set in .env if desired)
+notification:
+  telegram_bot_token: "${TELEGRAM_BOT_TOKEN}"
+  telegram_chat_id: "${TELEGRAM_CHAT_ID}"
+  on_stage_complete: true
+  on_failure: true
+  on_heartbeat: false
+
+# Budget
+budget:
+  max_invocations: 200
+  max_wall_clock_seconds: 28800
+
+stages: []  # Populated by planner

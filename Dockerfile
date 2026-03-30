@@ -1,13 +1,19 @@
-# consortium Dockerfile
-# Multi-stage build: installs system deps, then Python deps, then the package.
+# consortium Dockerfile — CLI agent mode
+# Agents run as local CLI tool subprocesses (claude, codex, gemini).
+# Auth handled by mounting volumes (~/.claude, ~/.codex, ~/.gemini)
+# set up manually before first run.
 #
 # Build:
 #   docker build -t consortium .
 #   docker build --target minimal -t consortium:minimal .
 #
+# First-time auth (interactive, once per tool):
+#   docker run -it -v claude-auth:/root/.claude consortium claude setup-token
+#   docker run -it -v codex-auth:/root/.codex consortium codex auth login
+#   docker run -it -v gemini-auth:/root/.gemini consortium gemini auth login
+#
 # Run:
-#   docker run --env-file .env -v $(pwd)/results:/app/results consortium \
-#     python launch_multiagent.py --task "Your research task" --no-counsel --no-log-to-files
+#   docker compose run consortium --task "Your research task"
 
 # ── Stage 1: system dependencies ──────────────────────────────────────────────
 FROM python:3.11-slim AS base
@@ -19,16 +25,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-bibtex-extra \
     bibtex2html \
     latexmk \
-    # Git (for git-commit metadata)
+    # Git (for git-commit metadata + publish script)
     git \
     # Build tools for some Python packages
     build-essential \
-    # Cleanup
+    # curl for Node.js install
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 22 (for claude, codex, gemini CLIs)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install CLI agent tools
+RUN npm install -g \
+    @anthropic-ai/claude-code \
+    @openai/codex \
+    @google/gemini-cli \
+    && npm cache clean --force
 
 WORKDIR /app
 
-# ── Stage 2: minimal install (no web crawl, no experiment tool) ──────────────
+# ── Stage 2: minimal install (no web crawl) ──────────────────────────────────
 FROM base AS minimal
 
 COPY pyproject.toml .
@@ -42,9 +61,10 @@ COPY .env.example .
 RUN pip install --no-cache-dir -e ".[docs]"
 
 ENV CONSORTIUM_LOG_TO_FILES=0
+ENV CONSORTIUM_DOCKER=1
 ENTRYPOINT ["python", "launch_multiagent.py", "--no-steering"]
 
-# ── Stage 3: full install (all optional extras) ───────────────────────────────
+# ── Stage 3: full install (all optional extras) ──────────────────────────────
 FROM base AS full
 
 COPY pyproject.toml .
@@ -59,6 +79,7 @@ COPY config/ config/
 COPY .env.example .
 COPY automation_tasks/ automation_tasks/
 COPY examples/ examples/
+COPY campaigns/ campaigns/
 
 # Install all extras
 RUN pip install --no-cache-dir -e ".[docs,web,observability]"
@@ -67,6 +88,7 @@ RUN pip install --no-cache-dir -e ".[docs,web,observability]"
 RUN python -m playwright install chromium --with-deps 2>/dev/null || true
 
 ENV CONSORTIUM_LOG_TO_FILES=0
+ENV CONSORTIUM_DOCKER=1
 ENTRYPOINT ["python", "launch_multiagent.py"]
 
 # Default target is full

@@ -87,12 +87,44 @@ def notify_stage_launched(stage_id: str, pid: int, workspace: str, config: Notif
     )
 
 
-def notify_campaign_complete(campaign_name: str, config: NotificationConfig) -> None:
+def notify_campaign_complete(
+    campaign_name: str, config: NotificationConfig,
+    workspace_dir: str | None = None,
+) -> None:
     notify(
         f"Campaign '{campaign_name}' is fully complete.",
         config,
         level="success",
     )
+    # Publish results to Jekyll site if configured
+    _publish_results(workspace_dir)
+
+
+def _publish_results(workspace_dir: str | None) -> None:
+    """Post-completion hook: publish results to Jekyll site if RESEARCH_SITE_REPO is set."""
+    import subprocess as _sp
+    import sys
+
+    site_repo = os.environ.get("RESEARCH_SITE_REPO")
+    if not site_repo or not workspace_dir:
+        return
+
+    publish_script = os.path.join(
+        os.path.dirname(__file__), "..", "..", "scripts", "publish_results.py"
+    )
+    if not os.path.exists(publish_script):
+        return
+
+    try:
+        _sp.run(
+            [sys.executable, publish_script,
+             "--workspace", workspace_dir,
+             "--site-repo", site_repo,
+             "--push"],
+            timeout=120,
+        )
+    except Exception as exc:
+        print(f"[notify] publish_results failed: {exc}")
 
 
 def notify_repair_started(

@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  # Main research pipeline (single run)
   consortium:
     build:
       context: .
@@ -8,17 +9,44 @@ services:
     image: consortium:latest
     env_file:
       - .env
+    environment:
+      - CONSORTIUM_DOCKER=1
     volumes:
-      # Persist results and logs outside the container
+      # Persist results and logs
       - ./results:/app/results
       - ./logs:/app/logs
-      # Mount config so you can edit it without rebuilding
+      # Mount config (edit without rebuilding)
       - ./.llm_config.yaml:/app/.llm_config.yaml:ro
+      # CLI tool auth (set up once via interactive login)
+      - claude-auth:/root/.claude
+      - codex-auth:/root/.codex
+      - gemini-auth:/root/.gemini
     # Override command as needed:
-    #   docker compose run consortium --task "Your research task" --no-counsel
+    #   docker compose run consortium --task "Your research task"
     command: ["--help"]
 
-  # Minimal image: no web crawl, no Playwright — for quick/cheap runs
+  # Campaign heartbeat (manages multi-stage research campaigns)
+  heartbeat:
+    build:
+      context: .
+      target: full
+    image: consortium:latest
+    env_file:
+      - .env
+    environment:
+      - CONSORTIUM_DOCKER=1
+    volumes:
+      - ./results:/app/results
+      - ./logs:/app/logs
+      - ./campaigns:/app/campaigns
+      - ./.llm_config.yaml:/app/.llm_config.yaml:ro
+      - claude-auth:/root/.claude
+      - codex-auth:/root/.codex
+      - gemini-auth:/root/.gemini
+    entrypoint: ["python", "scripts/campaign_heartbeat.py"]
+    # Usage: docker compose run heartbeat --campaign /app/campaigns/active/campaign.yaml
+
+  # Minimal image (no web crawl, no Playwright — for quick/cheap runs)
   consortium-minimal:
     build:
       context: .
@@ -26,8 +54,18 @@ services:
     image: consortium:minimal
     env_file:
       - .env
+    environment:
+      - CONSORTIUM_DOCKER=1
     volumes:
       - ./results:/app/results
       - ./logs:/app/logs
       - ./.llm_config.yaml:/app/.llm_config.yaml:ro
+      - claude-auth:/root/.claude
+      - codex-auth:/root/.codex
+      - gemini-auth:/root/.gemini
     command: ["--help"]
+
+volumes:
+  claude-auth:
+  codex-auth:
+  gemini-auth:
