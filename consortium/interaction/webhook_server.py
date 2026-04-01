@@ -80,6 +80,21 @@ def _get_twilio_url(req) -> str:
 def create_app(queue_path: str | None = None) -> Flask:
     app = Flask(__name__)
 
+    @app.after_request
+    def _add_cors(response):
+        """Allow cross-origin requests (GitHub Pages form → this server)."""
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return response
+
+    @app.route("/idea", methods=["OPTIONS"])
+    @app.route("/ideas", methods=["OPTIONS"])
+    @app.route("/health", methods=["OPTIONS"])
+    def cors_preflight():
+        """Handle CORS preflight requests."""
+        return Response(status=204)
+
     @app.route("/whatsapp", methods=["POST"])
     def whatsapp_webhook():
         """Receive an incoming WhatsApp message from Twilio."""
