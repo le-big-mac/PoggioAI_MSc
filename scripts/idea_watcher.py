@@ -24,7 +24,7 @@ import argparse
 import os
 import subprocess
 import sys
-import time
+import time as _time
 from datetime import datetime, timezone
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -64,23 +64,46 @@ def _send_whatsapp(message: str) -> None:
         print(f"[idea_watcher] WhatsApp delivery failed: {e}")
 
 
-def _launch_pipeline(idea_text: str, workspace: str, extra_args: list[str] | None = None) -> int:
-    """Launch a consortium pipeline run. Returns the process exit code."""
+def _find_latest_workspace(results_dir: str, before: float) -> str | None:
+    """Find the most recently created consortium_* workspace after `before` timestamp."""
+    if not os.path.isdir(results_dir):
+        return None
+    candidates = []
+    for name in os.listdir(results_dir):
+        path = os.path.join(results_dir, name)
+        if os.path.isdir(path) and name.startswith("consortium_"):
+            ctime = os.path.getctime(path)
+            if ctime >= before:
+                candidates.append((ctime, path))
+    if not candidates:
+        return None
+    candidates.sort(reverse=True)
+    return candidates[0][1]
+
+
+def _launch_pipeline(idea_text: str, extra_args: list[str] | None = None) -> tuple[int, str | None]:
+    """Launch a consortium pipeline run. Returns (exit_code, workspace_path)."""
+    results_dir = os.path.join(_REPO_ROOT, "results")
+    before = _time.time()
+
     cmd = [
         sys.executable,
         os.path.join(_REPO_ROOT, "launch_multiagent.py"),
         "--task", idea_text,
-        "--output-dir", workspace,
+        "--no-steering",
     ]
     if extra_args:
         cmd.extend(extra_args)
 
     print(f"[idea_watcher] Launching: {' '.join(cmd[:6])}...")
     result = subprocess.run(cmd, cwd=_REPO_ROOT)
-    return result.returncode
+
+    # Find the workspace the pipeline created
+    workspace = _find_latest_workspace(results_dir, before)
+    return result.returncode, workspace
 
 
-def process_one(queue_path: str | None, results_dir: str, extra_args: list[str] | None = None) -> bool:
+def process_one(queue_path: str | None, extra_args: list[str] | None = None) -> bool:
     """Process the next pending idea. Returns True if an idea was processed."""
     idea = next_pending(queue_path)
     if idea is None:
@@ -91,11 +114,6 @@ def process_one(queue_path: str | None, results_dir: str, extra_args: list[str] 
     sender = idea["sender"]
     short_id = idea_id[:8]
 
-    # Create workspace
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    workspace = os.path.join(results_dir, f"idea_{short_id}_{timestamp}")
-    os.makedirs(workspace, exist_ok=True)
-
     # Notify: starting
     start_msg = (
         f"[consortium] Starting analysis of your idea (ID: {short_id}):\n"
@@ -105,36 +123,43 @@ def process_one(queue_path: str | None, results_dir: str, extra_args: list[str] 
     _send_whatsapp(start_msg)
     print(f"[idea_watcher] Processing idea {short_id}: {idea_text[:80]}...")
 
-    mark_running(idea_id, workspace, queue_path)
+    mark_running(idea_id, "(launching...)", queue_path)
 
-    # Run the pipeline
-    exit_code = _launch_pipeline(idea_text, workspace, extra_args)
+    # Run the pipeline — it creates its own workspace under results/
+    exit_code, workspace = _launch_pipeline(idea_text, extra_args)
+
+    # Update queue entry with actual workspace path
+    if workspace:
+        mark_running(idea_id, workspace, queue_path)
 
     if exit_code == 0:
         mark_completed(idea_id, queue_path)
 
         # Check for output paper
         paper_path = None
-        for candidate in ("final_paper.pdf", "final_paper.md", "final_paper.tex"):
-            p = os.path.join(workspace, candidate)
-            if os.path.exists(p):
-                paper_path = p
-                break
+        if workspace:
+            for candidate in ("final_paper.pdf", "final_paper.md", "final_paper.tex"):
+                p = os.path.join(workspace, candidate)
+                if os.path.exists(p):
+                    paper_path = p
+                    break
         paper_note = f"\nPaper: {paper_path}" if paper_path else ""
+        ws_note = f"\nWorkspace: {workspace}" if workspace else ""
 
         done_msg = (
             f"[consortium] ✓ Analysis complete for idea {short_id}!\n"
-            f"\"{idea_text[:120]}{'...' if len(idea_text) > 120 else ''}\"\n"
-            f"Workspace: {workspace}{paper_note}"
+            f"\"{idea_text[:120]}{'...' if len(idea_text) > 120 else ''}\""
+            f"{ws_note}{paper_note}"
         )
         _send_whatsapp(done_msg)
         print(f"[idea_watcher] ✓ Idea {short_id} completed successfully.")
     else:
         mark_failed(idea_id, queue_path)
+        ws_note = f"\nCheck logs in {workspace}" if workspace else ""
         fail_msg = (
             f"[consortium] ✗ Analysis failed for idea {short_id} (exit code {exit_code}).\n"
-            f"\"{idea_text[:120]}{'...' if len(idea_text) > 120 else ''}\"\n"
-            f"Check logs in {workspace}"
+            f"\"{idea_text[:120]}{'...' if len(idea_text) > 120 else ''}\""
+            f"{ws_note}"
         )
         _send_whatsapp(fail_msg)
         print(f"[idea_watcher] ✗ Idea {short_id} failed with exit code {exit_code}.")
@@ -146,8 +171,6 @@ def main():
     parser = argparse.ArgumentParser(description="Idea queue watcher — polls and launches pipeline runs.")
     parser.add_argument("--interval", type=int, default=30, help="Poll interval in seconds (default: 30)")
     parser.add_argument("--queue-path", default=None, help="Path to ideas.json")
-    parser.add_argument("--results-dir", default=os.path.join(_REPO_ROOT, "results"),
-                        help="Directory for pipeline output workspaces")
     parser.add_argument("--once", action="store_true", help="Process one idea and exit")
     parser.add_argument(
         "extra_args", nargs="*",
@@ -155,27 +178,24 @@ def main():
     )
     args = parser.parse_args()
 
-    os.makedirs(args.results_dir, exist_ok=True)
-
     if args.once:
-        found = process_one(args.queue_path, args.results_dir, args.extra_args)
+        found = process_one(args.queue_path, args.extra_args)
         sys.exit(0 if found else 1)
 
     print(f"[idea_watcher] Polling every {args.interval}s. Queue: {args.queue_path or '(default)'}")
-    print(f"[idea_watcher] Results dir: {args.results_dir}")
     print(f"[idea_watcher] Extra pipeline args: {args.extra_args or '(none)'}")
 
     while True:
         try:
-            processed = process_one(args.queue_path, args.results_dir, args.extra_args)
+            processed = process_one(args.queue_path, args.extra_args)
             if not processed:
-                time.sleep(args.interval)
+                _time.sleep(args.interval)
         except KeyboardInterrupt:
             print("\n[idea_watcher] Shutting down.")
             break
         except Exception as e:
             print(f"[idea_watcher] Error: {e}")
-            time.sleep(args.interval)
+            _time.sleep(args.interval)
 
 
 if __name__ == "__main__":
