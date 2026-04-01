@@ -174,9 +174,6 @@ def create_cli_agent(
             f"Supported: {list(_RUNNERS.keys())}"
         )
 
-    if workspace_dir:
-        os.makedirs(os.path.join(workspace_dir, agent_name), exist_ok=True)
-
     def node_fn(state: dict) -> dict:
         task = state.get("agent_task") or state.get("task", "")
         prompt = _build_prompt(system_prompt, task, workspace_dir, agent_name)
