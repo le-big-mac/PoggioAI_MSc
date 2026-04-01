@@ -104,6 +104,213 @@ def build_pipeline_stages_v2(enable_math_agents: bool) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Quick-pass pipeline (--quick-pass)
+# ---------------------------------------------------------------------------
+
+QUICK_PIPELINE_STAGES = [
+    "persona_council",
+    "literature_review_agent",
+    "brainstorm_agent",
+    "formalize_goals_entry",
+    "formalize_goals_agent",
+    "research_plan_writeup_agent",
+]
+
+
+def build_pipeline_stages_quick() -> list[str]:
+    return list(QUICK_PIPELINE_STAGES)
+
+
+def _read_file_for_verdict(path: str, max_chars: int = 50000) -> str:
+    """Read a file for the quick verdict assembler, returning '' on failure."""
+    try:
+        with open(path) as f:
+            return f.read(max_chars)
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def build_quick_verdict_node(workspace_dir: str) -> Any:
+    """Terminal node for the quick-pass pipeline.
+
+    Assembles quick_pass_verdict.json and a combined final_paper.md
+    (condensed lit review + research plan) so the publish step works.
+    """
+
+    def quick_verdict_node(state: dict) -> dict:
+        paper_ws = os.path.join(workspace_dir, "paper_workspace")
+
+        novelty_text = _read_file_for_verdict(os.path.join(paper_ws, "novelty_flags.json"))
+        brainstorm_text = _read_file_for_verdict(os.path.join(paper_ws, "brainstorm.json"))
+        lit_review_text = _read_file_for_verdict(os.path.join(paper_ws, "literature_review.tex"))
+        plan_text = _read_file_for_verdict(os.path.join(paper_ws, "research_plan.md"))
+        if not plan_text:
+            plan_text = _read_file_for_verdict(os.path.join(paper_ws, "research_plan.tex"))
+
+        feasibility = state.get("lit_review_feasibility") or {}
+        feasible = feasibility.get("feasible", True)
+
+        novelty_data = {}
+        num_approaches = 0
+        try:
+            if novelty_text:
+                novelty_data = json.loads(novelty_text)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        try:
+            if brainstorm_text:
+                bs = json.loads(brainstorm_text)
+                num_approaches = len(bs) if isinstance(bs, list) else len(bs.get("approaches", []))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        claims = novelty_data.get("claims", [])
+        open_claims = [c for c in claims if c.get("status") == "OPEN"]
+        known_claims = [c for c in claims if c.get("status") in ("KNOWN", "EQUIVALENT_KNOWN")]
+
+        verdict = {
+            "feasible": feasible,
+            "feasibility_reason": feasibility.get("reason", ""),
+            "total_claims": len(claims),
+            "open_claims": len(open_claims),
+            "known_claims": len(known_claims),
+            "num_approaches": num_approaches,
+            "pipeline_mode": "quick",
+        }
+
+        verdict_path = os.path.join(workspace_dir, "quick_pass_verdict.json")
+        with open(verdict_path, "w") as f:
+            json.dump(verdict, f, indent=2)
+        print(f"[quick_verdict] Feasible: {feasible}, "
+              f"Open claims: {len(open_claims)}/{len(claims)}, "
+              f"Approaches: {num_approaches}")
+
+        # Assemble final_paper.md (lit review summary + research plan)
+        sections = ["# Quick Pass: Research Assessment\n"]
+        if not feasible:
+            sections.append(f"> **Verdict: NOT FEASIBLE** — {feasibility.get('reason', 'see details below')}\n")
+        else:
+            sections.append(f"> **Verdict: FEASIBLE** — {len(open_claims)} open claims, "
+                            f"{num_approaches} approaches identified\n")
+        if lit_review_text:
+            sections.append("## Literature Review\n")
+            sections.append(lit_review_text)
+            sections.append("")
+        if claims:
+            sections.append("## Novelty Assessment\n")
+            for c in claims:
+                status = c.get("status", "?")
+                claim_text = c.get("claim_text", c.get("claim_id", "?"))[:200]
+                sections.append(f"- **{status}**: {claim_text}")
+            sections.append("")
+        if plan_text:
+            sections.append("## Research Plan\n")
+            sections.append(plan_text)
+
+        final_path = os.path.join(workspace_dir, "final_paper.md")
+        with open(final_path, "w") as f:
+            f.write("\n".join(sections))
+        print(f"[quick_verdict] Combined document: {final_path}")
+
+        return {"finished": True}
+
+    quick_verdict_node.__name__ = "quick_verdict"
+    return quick_verdict_node
+
+
+def quick_lit_review_gate_router(state: "ResearchState") -> str:
+    """Lit review gate router for quick-pass: infeasible → verdict, not retry."""
+    target = state.get("current_agent") or "brainstorm_agent"
+    if target == "persona_council":
+        return "quick_verdict_infeasible"
+    return "brainstorm_agent"
+
+
+def build_research_graph_quick(config: "ResearchGraphConfig"):
+    """Build the quick-pass pipeline: persona → lit review → brainstorm → goals → plan → verdict."""
+    from .graph_config import ResearchGraphConfig  # noqa: F811
+    from .persona_council import create_persona_council_node
+
+    workspace_dir = config.workspace_dir
+    authorized_imports = config.authorized_imports
+    summary_model_id = config.summary_model_id
+    checkpointer = config.checkpointer
+    cli_backend_registry = config.cli_backend_registry
+    lit_review_max_attempts = config.artifacts.lit_review_max_attempts
+
+    persona_council_specs = config.persona_council.specs
+    persona_debate_rounds = config.persona_council.debate_rounds
+    persona_synthesis_model = config.persona_council.synthesis_model
+    persona_max_post_vote_retries = config.persona_council.max_post_vote_retries
+
+    counsel_kwargs: dict = {}
+
+    def _m(agent_name: str) -> Any:
+        return cli_backend_registry.get(agent_name)
+
+    def _wrap(node, name):
+        return with_pdf_summary(node, name, workspace_dir, summary_model_id)
+
+    nodes: dict[str, Any] = {
+        "persona_council": create_persona_council_node(
+            workspace_dir=workspace_dir,
+            persona_specs=persona_council_specs,
+            max_debate_rounds=persona_debate_rounds,
+            synthesis_model=persona_synthesis_model,
+            max_post_vote_retries=persona_max_post_vote_retries,
+        ),
+        "literature_review_agent": _wrap(
+            build_literature_review_node(_m("literature_review_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
+            "literature_review_agent",
+        ),
+        "lit_review_gate": build_lit_review_gate_node(workspace_dir, max_attempts=1),
+        "brainstorm_agent": _wrap(
+            build_brainstorm_node(_m("brainstorm_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
+            "brainstorm_agent",
+        ),
+        "formalize_goals_entry": build_formalize_goals_entry_node(workspace_dir),
+        "formalize_goals_agent": _wrap(
+            build_formalize_goals_node(_m("formalize_goals_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
+            "formalize_goals_agent",
+        ),
+        "research_plan_writeup_agent": _wrap(
+            build_research_plan_writeup_node(_m("research_plan_writeup_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
+            "research_plan_writeup_agent",
+        ),
+        "quick_verdict": build_quick_verdict_node(workspace_dir),
+        "quick_verdict_infeasible": build_quick_verdict_node(workspace_dir),
+    }
+
+    graph = StateGraph(ResearchState)
+    for name, node in nodes.items():
+        graph.add_node(name, node)
+
+    graph.set_entry_point("persona_council")
+    graph.add_edge("persona_council", "literature_review_agent")
+    graph.add_edge("literature_review_agent", "lit_review_gate")
+    graph.add_conditional_edges(
+        "lit_review_gate",
+        quick_lit_review_gate_router,
+        {
+            "brainstorm_agent": "brainstorm_agent",
+            "quick_verdict_infeasible": "quick_verdict_infeasible",
+        },
+    )
+    graph.add_edge("quick_verdict_infeasible", END)
+    graph.add_edge("brainstorm_agent", "formalize_goals_entry")
+    graph.add_edge("formalize_goals_entry", "formalize_goals_agent")
+    graph.add_edge("formalize_goals_agent", "research_plan_writeup_agent")
+    graph.add_edge("research_plan_writeup_agent", "quick_verdict")
+    graph.add_edge("quick_verdict", END)
+
+    compile_kwargs: dict = {}
+    if checkpointer is not None:
+        compile_kwargs["checkpointer"] = checkpointer
+
+    return graph.compile(**compile_kwargs)
+
+
+# ---------------------------------------------------------------------------
 # Routing helpers
 # ---------------------------------------------------------------------------
 

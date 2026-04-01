@@ -154,6 +154,14 @@ Examples:
     )
 
     parser.add_argument(
+        "--quick-pass",
+        action="store_true",
+        default=False,
+        help="Quick first pass: persona debate, lit review, brainstorm, and research plan. "
+             "No experiments, paper, or review. ~30 min, produces a research plan and verdict.",
+    )
+
+    parser.add_argument(
         "--enable-math-agents",
         action="store_true",
         help="Enable theorem-oriented math agents (proposer, prover, rigorous verifier, empirical verifier)."

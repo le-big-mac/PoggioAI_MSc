@@ -46,6 +46,30 @@ services:
     entrypoint: ["python", "scripts/campaign_heartbeat.py"]
     # Usage: docker compose run heartbeat --campaign /app/campaigns/active/campaign.yaml
 
+  # Idea receiver: polls GitHub Issues, runs pipelines, publishes results
+  # Start with: docker compose up idea-receiver
+  idea-receiver:
+    build:
+      context: .
+      target: idea-receiver
+    image: consortium:idea-receiver
+    env_file:
+      - .env
+    environment:
+      - CONSORTIUM_DOCKER=1
+      - WEBSITE_REPO_PATH=/website
+      - WEBSITE_DOMAIN=le-big-mac.github.io
+      - RESEARCH_SITE_REPO=/website
+    volumes:
+      - ./results:/app/results
+      - ./logs:/app/logs
+      - ./.llm_config.yaml:/app/.llm_config.yaml:ro
+      - claude-auth:/root/.claude
+      - codex-auth:/root/.codex
+      - gemini-auth:/root/.gemini
+      - ~/le-big-mac.github.io:/website
+    restart: unless-stopped
+
   # Minimal image (no web crawl, no Playwright — for quick/cheap runs)
   consortium-minimal:
     build:

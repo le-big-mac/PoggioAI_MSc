@@ -91,5 +91,11 @@ ENV CONSORTIUM_LOG_TO_FILES=0
 ENV CONSORTIUM_DOCKER=1
 ENTRYPOINT ["python", "launch_multiagent.py"]
 
+# ── Stage 4: idea-receiver (GitHub Issues watcher) ──────────────────────────
+FROM full AS idea-receiver
+
+ENTRYPOINT []
+CMD ["python", "scripts/idea_watcher.py", "--repo", "le-big-mac/le-big-mac.github.io", "--interval", "30"]
+
 # Default target is full
 FROM full

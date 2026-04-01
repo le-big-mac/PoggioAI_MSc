@@ -190,7 +190,7 @@ def _copy_images(workspace: Path, site_repo: Path, run_id: str) -> str:
     return f"/assets/images/research/{run_id}"
 
 
-def build_post(workspace: Path, site_repo: Path) -> tuple[str, str]:
+def build_post(workspace: Path, site_repo: Path, issue_number: int | None = None) -> tuple[str, str]:
     """Build a Jekyll research post from a workspace. Returns (filename, content)."""
     run_id = workspace.name
     metadata = _read_json(str(workspace / "experiment_metadata.json"))
@@ -233,14 +233,16 @@ def build_post(workspace: Path, site_repo: Path) -> tuple[str, str]:
 
     body = "\n\n---\n\n".join(sections) if sections else "*No results found in workspace.*"
 
+    issue_line = f'\nissue_number: {issue_number}' if issue_number else ''
+
     content = f"""---
-layout: research
+layout: research-post
 title: "{title}"
 date: {date}
 author: "PoggioAI Consortium"
 usemathjax: true
 status: "{status}"
-pipeline_run: "{run_id}"
+pipeline_run: "{run_id}"{issue_line}
 ---
 
 > **Task:** {task[:500]}
@@ -259,6 +261,7 @@ def main():
         help="Path to Jekyll site repo (default: $RESEARCH_SITE_REPO)",
     )
     parser.add_argument("--push", action="store_true", help="Git add, commit, and push")
+    parser.add_argument("--issue-number", type=int, default=None, help="GitHub Issue number")
     args = parser.parse_args()
 
     if not args.site_repo:
@@ -275,7 +278,7 @@ def main():
     research_dir = site_repo / "_research"
     research_dir.mkdir(exist_ok=True)
 
-    filename, content = build_post(workspace, site_repo)
+    filename, content = build_post(workspace, site_repo, issue_number=args.issue_number)
     post_path = research_dir / filename
 
     with open(post_path, "w") as f:
