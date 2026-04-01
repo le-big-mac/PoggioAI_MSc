@@ -43,6 +43,16 @@ budget:
 persona_council:
   max_debate_rounds: 3
   synthesis_model: claude-opus-4-6
+  personas:
+    - persona: practical_compass
+      model: claude-opus-4-6
+      reasoning_effort: high
+    - persona: rigor_novelty
+      model: gpt-5.4
+      reasoning_effort: high
+    - persona: narrative_architect
+      model: gpt-5.4
+      reasoning_effort: high
 
 # --- Duality check model ---
 duality_check:
