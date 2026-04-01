@@ -322,7 +322,7 @@ the LaTeX errors and try again.
         if model:
             cmd.extend(["--model", model])
         cmd.extend(["--allowedTools",
-                     "Read,Write,Edit,Bash(tectonic*),Bash(cat*),Bash(ls*),Grep,Glob"])
+                     "Read,Write,Edit,WebFetch,WebSearch,Bash(tectonic*),Bash(cat*),Bash(ls*),Bash(curl*),Grep,Glob"])
 
         if backend == "codex":
             cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
