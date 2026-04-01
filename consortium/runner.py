@@ -456,7 +456,8 @@ def main():
     args = parse_arguments()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_start_time = datetime.now()
-    effective_pipeline_mode = "full_research"
+    quick_pass = getattr(args, "quick_pass", False)
+    effective_pipeline_mode = "quick" if quick_pass else "full_research"
 
     # --list-runs: print past workspaces and exit
     if getattr(args, "list_runs", False):
@@ -595,12 +596,25 @@ def main():
     print(f"Token tracker initialized: {token_file}")
 
     print(f"Task: {task[:100]}{'...' if len(task) > 100 else ''}")
-    print("Pipeline mode: full_research (fixed-stage)")
-    if args.enable_math_agents:
-        print("Math agent workflow enabled.")
 
-    pipeline_stages = build_pipeline_stages_v2(args.enable_math_agents)
-    print("Pipeline version: v2 (persona-council-driven)")
+    if quick_pass:
+        # Force lightweight settings for quick pass
+        args.enable_math_agents = False
+        args.no_duality_check = True
+        args.no_counsel = True
+        args.enforce_paper_artifacts = False
+        args.enforce_editorial_artifacts = False
+        args.require_pdf = False
+        args.require_experiment_plan = False
+        from .graph import build_pipeline_stages_quick
+        pipeline_stages = build_pipeline_stages_quick()
+        print("Pipeline mode: quick-pass (no experiments, no paper)")
+    else:
+        print("Pipeline mode: full_research (fixed-stage)")
+        if args.enable_math_agents:
+            print("Math agent workflow enabled.")
+        pipeline_stages = build_pipeline_stages_v2(args.enable_math_agents)
+        print("Pipeline version: v2 (persona-council-driven)")
     try:
         start_stage_index = (
             _resolve_start_stage_index(args.start_from_stage, pipeline_stages)
@@ -752,7 +766,7 @@ def main():
         if hasattr(model, "budget_manager"):
             budget_manager = model.budget_manager
 
-        from .graph import build_research_graph_v2
+        from .graph import build_research_graph_v2, build_research_graph_quick
         from .graph_config import (
             ResearchGraphConfig,
             PersonaCouncilConfig,
@@ -792,9 +806,14 @@ def main():
             budget_manager=budget_manager,
             model_registry=model_registry,
         )
-        graph = build_research_graph_v2(graph_config)
-        print(f"Pipeline: {persona_debate_rounds} persona debate rounds, "
-              f"duality_check={'enabled' if enable_duality_check else 'disabled'}")
+
+        if quick_pass:
+            graph = build_research_graph_quick(graph_config)
+            print(f"Pipeline: quick-pass, {persona_debate_rounds} persona debate rounds")
+        else:
+            graph = build_research_graph_v2(graph_config)
+            print(f"Pipeline: {persona_debate_rounds} persona debate rounds, "
+                  f"duality_check={'enabled' if enable_duality_check else 'disabled'}")
 
         if adversarial_verification:
             print("Adversarial verification enabled — red-team verifiers will "

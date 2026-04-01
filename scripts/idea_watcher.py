@@ -90,6 +90,7 @@ def _launch_pipeline(idea_text: str, extra_args: list[str] | None = None) -> tup
         os.path.join(_REPO_ROOT, "launch_multiagent.py"),
         "--task", idea_text,
         "--no-steering",
+        "--quick-pass",
     ]
     if extra_args:
         cmd.extend(extra_args)
