@@ -115,24 +115,25 @@ def close_issue(repo: str, issue_number: int) -> None:
 # ---------------------------------------------------------------------------
 
 COMMANDS = {"plan", "run", "close"}
-MODIFIERS = {"counsel", "theory"}
+MODIFIERS = {"counsel", "theory", "experiment"}
 
 
 def parse_command(text: str) -> tuple[str | None, list[str], str]:
-    """Parse a command from comment text.
+    """Parse a slash command from comment text.
 
-    Returns (command, modifiers, feedback) or (None, [], "").
+    Requires a leading /. Returns (command, modifiers, feedback) or (None, [], "").
 
     Examples:
-        "plan add kernel methods"       → ("plan", [], "add kernel methods")
-        "run counsel theory focus on X" → ("run", ["counsel", "theory"], "focus on X")
-        "run experiment only, 5 seeds"  → ("run", [], "experiment only, 5 seeds")
-        "close"                         → ("close", [], "")
+        "/plan add kernel methods"             → ("plan", [], "add kernel methods")
+        "/run counsel theory focus on X"       → ("run", ["counsel", "theory"], "focus on X")
+        "/run experiment only, 5 seeds"        → ("run", ["experiment"], "only, 5 seeds")
+        "/close"                               → ("close", [], "")
+        "some random comment"                  → (None, [], "")
     """
     text = text.strip()
-    # Strip leading / if present (support both "plan" and "/plan")
-    if text.startswith("/"):
-        text = text[1:]
+    if not text.startswith("/"):
+        return None, [], ""
+    text = text[1:]
 
     words = text.split()
     if not words or words[0].lower() not in COMMANDS:
