@@ -212,22 +212,23 @@ def _latex_to_markdown(tex: str) -> str:
     return tex.strip()
 
 
-def build_quick_verdict_node(workspace_dir: str) -> Any:
+def build_quick_verdict_node(workspace_dir: str, cli_backend_registry=None) -> Any:
     """Terminal node for the quick-pass pipeline.
 
-    Assembles quick_pass_verdict.json and a combined final_paper.md
-    (condensed lit review + research plan) so the publish step works.
+    1. Writes quick_pass_verdict.json (structured data for the watcher).
+    2. Calls a CLI agent to compose a coherent research proposal/assessment
+       document from all prior stage artifacts, outputting final_paper.tex.
+    3. Compiles the .tex to PDF.
     """
 
     def quick_verdict_node(state: dict) -> dict:
+        import subprocess as _sp
+
         paper_ws = os.path.join(workspace_dir, "paper_workspace")
 
+        # --- Build verdict JSON ---
         novelty_text = _read_file_for_verdict(os.path.join(paper_ws, "novelty_flags.json"))
         brainstorm_text = _read_file_for_verdict(os.path.join(paper_ws, "brainstorm.json"))
-        lit_review_text = _read_file_for_verdict(os.path.join(paper_ws, "literature_review.tex"))
-        plan_text = _read_file_for_verdict(os.path.join(paper_ws, "research_plan.md"))
-        if not plan_text:
-            plan_text = _read_file_for_verdict(os.path.join(paper_ws, "research_plan.tex"))
 
         feasibility = state.get("lit_review_feasibility") or {}
         feasible = feasibility.get("feasible", True)
@@ -267,102 +268,110 @@ def build_quick_verdict_node(workspace_dir: str) -> Any:
               f"Open claims: {len(open_claims)}/{len(claims)}, "
               f"Approaches: {num_approaches}")
 
-        # Assemble final_paper.tex (lit review + novelty + research plan) and compile PDF
-        import subprocess as _sp
+        # --- Call CLI agent to compose the proposal document ---
+        from datetime import date as _date
+        today = _date.today().isoformat()
 
-        # Build novelty assessment as LaTeX
-        novelty_tex = ""
-        if claims:
-            items = []
-            for c in claims:
-                status = c.get("status", "?")
-                claim_text = c.get("claim_text", c.get("claim_id", "?"))[:200]
-                # Escape LaTeX special chars
-                for ch in ("&", "%", "$", "#", "_", "{", "}"):
-                    claim_text = claim_text.replace(ch, "\\" + ch)
-                items.append(f"  \\item[\\textbf{{{status}}}] {claim_text}")
-            novelty_tex = (
-                "\\section{Novelty Assessment}\n"
-                "\\begin{description}\n"
-                + "\n".join(items)
-                + "\n\\end{description}\n"
-            )
+        compose_prompt = f"""You are composing a research proposal and assessment document.
+Today's date is {today}.
 
-        verdict_line = (
-            f"NOT FEASIBLE --- {feasibility.get('reason', 'see details below')}"
-            if not feasible
-            else f"FEASIBLE --- {len(open_claims)} open claims, {num_approaches} approaches identified"
-        )
+Read ALL of the following files in paper_workspace/:
+- research_proposal.md (the original idea from persona council debate)
+- literature_review.tex (full literature review with citations)
+- novelty_flags.json (per-claim novelty assessment)
+- brainstorm.md or brainstorm.json (approaches considered)
+- research_goals.json (formalized goals with success criteria)
+- track_decomposition.json (theory vs experiment assignment)
+- research_plan.tex or research_plan.md (detailed research plan)
 
-        # If lit review and plan are already full LaTeX documents, extract their bodies
-        def _extract_body(tex: str) -> str:
-            import re as _re2
-            m = _re2.search(r"\\begin\{document\}(.*?)(?:\\end\{document\})?$", tex, _re2.DOTALL)
-            if m:
-                body = m.group(1)
-                # Remove \maketitle — we have our own
-                body = body.replace("\\maketitle", "")
-                return body.strip()
-            return tex
+Also read quick_pass_verdict.json in the workspace root for the feasibility verdict.
 
-        lit_body = _extract_body(lit_review_text) if lit_review_text else ""
-        plan_body = _extract_body(plan_text) if plan_text else ""
+Compose a single, coherent LaTeX document that tells the story of this research idea
+as a proper research proposal. The document should have:
 
-        combined_tex = (
-            "\\documentclass[11pt,a4paper]{article}\n"
-            "\\usepackage[utf8]{inputenc}\n"
-            "\\usepackage[T1]{fontenc}\n"
-            "\\usepackage{lmodern}\n"
-            "\\usepackage[margin=1.1in]{geometry}\n"
-            "\\usepackage{amsmath,amssymb,amsthm}\n"
-            "\\usepackage{booktabs}\n"
-            "\\usepackage{enumitem}\n"
-            "\\usepackage{hyperref}\n"
-            "\\usepackage{natbib}\n"
-            "\\usepackage{microtype}\n"
-            "\\usepackage{xcolor}\n"
-            "\\usepackage{graphicx}\n"
-            "\\newtheorem{theorem}{Theorem}\n"
-            "\\newtheorem{lemma}[theorem]{Lemma}\n"
-            "\\newtheorem{proposition}[theorem]{Proposition}\n"
-            "\\newtheorem{definition}{Definition}\n"
-            "\\newtheorem{remark}{Remark}\n"
-            "\\title{Quick Pass: Research Assessment}\n"
-            "\\author{PoggioAI Research Consortium}\n"
-            f"\\date{{\\today}}\n"
-            "\\begin{document}\n"
-            "\\maketitle\n"
-            f"\\begin{{center}}\\textbf{{Verdict: {verdict_line}}}\\end{{center}}\n"
-            "\\bigskip\n"
-        )
-        if lit_body:
-            combined_tex += lit_body + "\n\n"
-        if novelty_tex:
-            combined_tex += novelty_tex + "\n\n"
-        if plan_body:
-            combined_tex += "\\section{Research Plan}\n" + plan_body + "\n\n"
-        combined_tex += "\\end{document}\n"
+1. **Title and Abstract** — What is the idea, why does it matter, what's the verdict
+2. **Introduction** — Motivation, context, the core question
+3. **Literature Review** — Key related work, what's known, what's open (draw from the lit review)
+4. **Novelty Assessment** — Which claims are open vs known, what's genuinely new
+5. **Proposed Approach** — The best approaches from the brainstorm, with concrete details
+6. **Research Plan** — Specific mathematical results to prove (theorem statements, proof strategies)
+   and specific experiments to run (datasets, metrics, baselines, expected outcomes)
+7. **Feasibility and Risk Assessment** — Is this doable, what could go wrong, timeline estimate
 
-        # Write .tex
-        tex_path = os.path.join(workspace_dir, "final_paper.tex")
-        with open(tex_path, "w") as f:
-            f.write(combined_tex)
-        print(f"[quick_verdict] LaTeX written: {tex_path}")
+This should read as a document a researcher would want to come back to — not a dump of
+agent outputs, but a synthesized, opinionated proposal that makes a case for (or against)
+pursuing this research direction.
 
-        # Compile PDF (best-effort, don't fail the pipeline if LaTeX is missing)
+Write the output as a complete LaTeX document to: {workspace_dir}/final_paper.tex
+
+Then compile it to PDF by running:
+pdflatex -interaction=nonstopmode -output-directory {workspace_dir} {workspace_dir}/final_paper.tex
+
+Run pdflatex twice (for cross-references). If compilation fails, fix the LaTeX errors
+and try again.
+"""
+        # Determine CLI backend
+        backend = "claude"
+        model = None
+        if cli_backend_registry is not None:
+            spec = cli_backend_registry.get("quick_verdict")
+            backend = spec.backend
+            model = spec.model
+
+        cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "30"]
+        if model:
+            cmd.extend(["--model", model])
+        cmd.extend(["--allowedTools",
+                     "Read,Write,Edit,Bash(pdflatex*),Bash(bibtex*),Bash(cat*),Bash(ls*),Grep,Glob"])
+
+        if backend == "codex":
+            cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+            if model:
+                cmd.extend(["--model", model])
+        elif backend == "gemini":
+            cmd = ["gemini"]
+            if model:
+                cmd.extend(["--model", model])
+
+        print(f"[quick_verdict] Composing proposal document via {backend}...")
         try:
-            for _ in range(2):  # two passes for references
-                _sp.run(
-                    ["pdflatex", "-interaction=nonstopmode", "-output-directory", workspace_dir, tex_path],
-                    cwd=workspace_dir, capture_output=True, timeout=60,
+            result = _sp.run(
+                cmd, input=compose_prompt, capture_output=True, text=True,
+                cwd=workspace_dir, timeout=600,
+                env=os.environ.copy(),
+            )
+            if result.returncode != 0:
+                print(f"[quick_verdict] Agent returned code {result.returncode}: {(result.stderr or '')[:300]}")
+        except _sp.TimeoutExpired:
+            print("[quick_verdict] Proposal composition timed out (600s)")
+        except FileNotFoundError:
+            print(f"[quick_verdict] CLI tool '{backend}' not found on PATH")
+
+        # Check results
+        pdf_path = os.path.join(workspace_dir, "final_paper.pdf")
+        tex_path = os.path.join(workspace_dir, "final_paper.tex")
+        if os.path.isfile(pdf_path):
+            print(f"[quick_verdict] PDF ready: {pdf_path}")
+        elif os.path.isfile(tex_path):
+            print(f"[quick_verdict] .tex written but PDF compilation may have failed")
+        else:
+            print("[quick_verdict] No output produced — check agent logs")
+
+        # Budget tracking
+        try:
+            from .cli_budget import get_global_cli_tracker
+            tracker = get_global_cli_tracker()
+            if tracker is not None:
+                tracker.record_invocation(
+                    agent_name="quick_verdict",
+                    backend=backend,
+                    model=model or "default",
+                    duration_seconds=0,  # subprocess already finished
+                    prompt_chars=len(compose_prompt),
+                    output_chars=0,
                 )
-            pdf_path = os.path.join(workspace_dir, "final_paper.pdf")
-            if os.path.isfile(pdf_path):
-                print(f"[quick_verdict] PDF compiled: {pdf_path}")
-            else:
-                print("[quick_verdict] PDF compilation failed — .tex file still available")
-        except (FileNotFoundError, _sp.TimeoutExpired) as e:
-            print(f"[quick_verdict] PDF compilation skipped: {e}")
+        except Exception:
+            pass
 
         return {"finished": True}
 
@@ -429,8 +438,8 @@ def build_research_graph_quick(config: "ResearchGraphConfig"):
             build_research_plan_writeup_node(_m("research_plan_writeup_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "research_plan_writeup_agent",
         ),
-        "quick_verdict": build_quick_verdict_node(workspace_dir),
-        "quick_verdict_infeasible": build_quick_verdict_node(workspace_dir),
+        "quick_verdict": build_quick_verdict_node(workspace_dir, cli_backend_registry),
+        "quick_verdict_infeasible": build_quick_verdict_node(workspace_dir, cli_backend_registry),
     }
 
     graph = StateGraph(ResearchState)
