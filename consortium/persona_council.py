@@ -210,23 +210,29 @@ def run_persona_council(
         )
 
         # Build per-round barrier wait commands
+        peer_files_str = " ".join(f"{coord_dir}/{p}.md" for p in peers)
         round_instructions = []
         for rnd in range(1, max_debate_rounds + 1):
-            wait_for_round = " && ".join(
-                f'while [ ! -f "{coord_dir}/{p}_round{rnd}.done" ]; do sleep 3; done'
-                for p in peers
-            )
-            peer_files_for_round = " ".join(f"{coord_dir}/{p}.md" for p in peers)
+            if rnd == 1:
+                # Round 1: no barrier needed — step 2 already waited for initial evals
+                wait_step = "(No wait needed — you already read peer evaluations in step 2.)"
+            else:
+                # Round 2+: wait for peers to finish the previous round
+                prev = rnd - 1
+                wait_for_prev = " && ".join(
+                    f'while [ ! -f "{coord_dir}/{p}_round{prev}.done" ]; do sleep 3; done'
+                    for p in peers
+                )
+                wait_step = f"Wait for peers to finish round {prev}:\n     {wait_for_prev}\n   Then re-read their files: {peer_files_str}"
+
             round_instructions.append(f"""
 DEBATE ROUND {rnd}:
-a) Wait for all peers to be ready for round {rnd}:
-     {wait_for_round}
-b) Read the latest content from each peer's file: {peer_files_for_round}
-c) Write your round {rnd} critique — append it to {coord_dir}/{persona_name}.md
+a) {wait_step}
+b) Write your round {rnd} critique — append it to {coord_dir}/{persona_name}.md
    under a "## Debate Round {rnd}" heading. Focus on the single strongest reason
    the proposal should be REJECTED from your lens. Be a harsh critic. Only concede
    if evidence from another persona is overwhelming.
-d) Signal that you have completed round {rnd}:
+c) Signal that you have completed round {rnd}:
      touch {coord_dir}/{persona_name}_round{rnd}.done""")
 
         debate_steps = "\n".join(round_instructions)
