@@ -7,36 +7,10 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple, Type
-
-from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Dict, List, Optional, Tuple
 
 
-class MathProofRigorCheckerToolInput(BaseModel):
-    claim_id: Optional[str] = Field(default=None, description="Claim id to validate against claim_graph and proof file")
-    proof_text: Optional[str] = Field(default=None, description="Proof text to check (if omitted, loads from proofs/<claim_id>.md)")
-    check_level: Optional[str] = Field(default=None, description="basic or strict (default: strict)")
-    workspace_subdir: Optional[str] = Field(default=None, description="Workspace subdir root (default: math_workspace)")
-
-
-class MathProofRigorCheckerTool(BaseTool):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    name: str = "math_proof_rigor_checker_tool"
-    description: str = """
-    Evaluate rigor/completeness of a proof draft with richer heuristics.
-
-    Checks include:
-    - required structure (claim, assumptions, detailed steps, conclusion)
-    - placeholder/TODO leakage
-    - step granularity and logical chain continuity
-    - dependency mention + dependency status summary from claim_graph
-    - assumption usage coverage
-    - named-rule usage (Hoeffding/Bernstein/Jensen/etc.) for nontrivial steps
-    - suspicious logical jump phrases
-    - bound constant/symbol coverage for claim symbols
-    """
-    args_schema: Type[BaseModel] = MathProofRigorCheckerToolInput
+class MathProofRigorCheckerTool:
     working_dir: Optional[str] = None
 
     _NAMED_RULE_PATTERNS = [
@@ -84,9 +58,9 @@ class MathProofRigorCheckerTool(BaseTool):
     }
 
     def __init__(self, working_dir: Optional[str] = None, **kwargs: Any):
-        super().__init__(working_dir=os.path.abspath(working_dir) if working_dir else None, **kwargs)
+        self.working_dir = os.path.abspath(working_dir) if working_dir else None
 
-    def _run(
+    def run(
         self,
         claim_id: Optional[str] = None,
         proof_text: Optional[str] = None,

@@ -37,14 +37,6 @@ statistical checks, and examine figures.
 """
 
 
-def get_tools(
-    workspace_dir: Optional[str],
-    model_id: str,
-    authorized_imports: Optional[List[str]] = None,
-) -> list:
-    return []
-
-
 def build_node(
     model: Any,
     workspace_dir: Optional[str],
@@ -52,18 +44,16 @@ def build_node(
     adversarial: bool = False,
     **cfg: Any,
 ) -> Callable:
-    from ..toolkits.model_utils import get_raw_model
-    model_id = get_raw_model(model)
-    tools = get_tools(workspace_dir, model_id, authorized_imports=authorized_imports)
+    tools = []
     if adversarial:
         from ..prompts.system_prompt_template import build_system_prompt
         system_prompt = build_system_prompt(
-            tools=tools,
+            tools=[],
             instructions=ADVERSARIAL_EXPERIMENT_PROMPT_PREFIX,
             managed_agents=None,
         )
     else:
-        system_prompt = get_experiment_verification_system_prompt(tools=tools, managed_agents=None)
+        system_prompt = get_experiment_verification_system_prompt(tools=[], managed_agents=None)
     counsel_models = cfg.get("counsel_models")
     agent_name = "experiment_verification_agent"
     if counsel_models is not None:

@@ -1,7 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Type, Any, List, Dict, Union
-from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, Any, List, Dict, Union
 
 import json
 import os
@@ -50,26 +48,13 @@ def _search_semantic_scholar(query: str, result_limit: int, s2_api_key: str) -> 
     return papers
 
 
-class PaperSearchToolInput(BaseModel):
-    query: str = Field(description="Search query for academic papers")
-    result_limit: Optional[int] = Field(default=None, description="Maximum number of papers to return")
-    fields_of_study: Optional[str] = Field(default=None, description="Comma-separated fields of study to filter by")
-
-
-class PaperSearchTool(BaseTool):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    name: str = "PaperSearchTool"
-    description: str = "Searches Semantic Scholar for academic papers based on a query. Returns a list of papers with titles, authors, abstracts, and other metadata."
-    args_schema: Type[BaseModel] = PaperSearchToolInput
-    s2_api_key: Optional[str] = None
-
+class PaperSearchTool:
     def __init__(self, **kwargs: Any):
-        s2_api_key = os.getenv("S2_API_KEY")
-        if not s2_api_key:
+        self.s2_api_key = os.getenv("S2_API_KEY")
+        if not self.s2_api_key:
             print("Warning: S2_API_KEY environment variable not set. Paper search may not work.")
-        super().__init__(s2_api_key=s2_api_key, **kwargs)
 
-    def _run(self, query: str, result_limit: int = 10, fields_of_study: str = None) -> str:
+    def run(self, query: str, result_limit: int = 10, fields_of_study: str = None) -> str:
         """
         Search for academic papers on Semantic Scholar.
 

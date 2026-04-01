@@ -3,9 +3,7 @@ Fetches and downloads papers from arXiv based on a search query.
 This tool is taken from https://programmer.ie/post/deepresearch1/
 """
 from __future__ import annotations
-from typing import Optional, Type, Any
-from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, Any
 
 import os
 import time
@@ -22,19 +20,7 @@ OUTPUT_FOLDER= "data"  # Folder to store downloaded papers
 BASE_URL= "http://export.arxiv.org/api/query?"
 
 
-class FetchArxivPapersToolInput(BaseModel):
-    search_query: str = Field(description="The search query to use for finding papers on arXiv.")
-    max_results: Optional[int] = Field(default=None, description="The maximum number of papers to return.")
-
-
-class FetchArxivPapersTool(BaseTool):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    name: str = "fetch_arxiv_papers"
-    description: str = """
-    This is a tool will search arxiv based upn the query. I will return a configurable amount of papers ."""
-    args_schema: Type[BaseModel] = FetchArxivPapersToolInput
-    output_folder: Optional[str] = None
-
+class FetchArxivPapersTool:
     def __init__(self, working_dir=None, **kwargs: Any):
         """
         Initialize the FetchArxivPapersTool.
@@ -44,10 +30,9 @@ class FetchArxivPapersTool(BaseTool):
                         If not provided, uses the default "data" folder.
         """
         if working_dir:
-            output_folder = os.path.join(working_dir, "ideation_agent", "downloaded_papers")
+            self.output_folder = os.path.join(working_dir, "ideation_agent", "downloaded_papers")
         else:
-            output_folder = OUTPUT_FOLDER
-        super().__init__(output_folder=output_folder, **kwargs)
+            self.output_folder = OUTPUT_FOLDER
 
     def sanitize_filename(self, title):
         """Sanitizes a string to be used as a filename."""
@@ -111,7 +96,7 @@ class FetchArxivPapersTool(BaseTool):
                 file.write(chunk)
         print(f"Downloaded: {title}")
 
-    def _run(self, search_query: str, max_results: int = 5):
+    def run(self, search_query: str, max_results: int = 5):
         # Create output folder if it doesn't exist
         os.makedirs(self.output_folder, exist_ok=True)
 

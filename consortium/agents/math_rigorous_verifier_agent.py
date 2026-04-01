@@ -10,9 +10,6 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.math_rigorous_verifier_instructions import get_math_rigorous_verifier_system_prompt
-from ..toolkits.math.claim_graph_tool import MathClaimGraphTool
-from ..toolkits.math.proof_workspace_tool import MathProofWorkspaceTool
-from ..toolkits.math.proof_rigor_checker_tool import MathProofRigorCheckerTool
 
 
 ADVERSARIAL_SYSTEM_PROMPT_PREFIX = """Your agent_name is "math_rigorous_verifier_agent" (ADVERSARIAL MODE).
@@ -65,15 +62,6 @@ After auditing all claims, write math_workspace/adversarial_audit_summary.md:
 """
 
 
-def get_tools(workspace_dir: Optional[str]) -> list:
-    tools = [
-        MathClaimGraphTool(working_dir=workspace_dir, allow_accepted_transition=False),
-        MathProofWorkspaceTool(working_dir=workspace_dir),
-        MathProofRigorCheckerTool(working_dir=workspace_dir),
-    ]
-    return tools
-
-
 def build_node(
     model: Any,
     workspace_dir: Optional[str],
@@ -81,16 +69,16 @@ def build_node(
     adversarial: bool = False,
     **cfg: Any,
 ) -> Callable:
-    tools = get_tools(workspace_dir)
+    tools = []
     if adversarial:
         from ..prompts.system_prompt_template import build_system_prompt
         system_prompt = build_system_prompt(
-            tools=tools,
+            tools=[],
             instructions=ADVERSARIAL_SYSTEM_PROMPT_PREFIX,
             managed_agents=None,
         )
     else:
-        system_prompt = get_math_rigorous_verifier_system_prompt(tools=tools, managed_agents=None)
+        system_prompt = get_math_rigorous_verifier_system_prompt(tools=[], managed_agents=None)
     counsel_models = cfg.get("counsel_models")
     agent_name = "math_rigorous_verifier_agent"
     if counsel_models is not None:

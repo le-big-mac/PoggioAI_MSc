@@ -18,9 +18,7 @@ import re
 import time
 import requests
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Any, Optional, Type
-from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Dict, Any, Optional
 
 from ...workflow_utils import safe_int_env as _safe_int_env, safe_float_env as _safe_float_env
 
@@ -31,8 +29,7 @@ class CitationSearchToolInput(BaseModel):
     search_source: Optional[str] = Field(default=None, description="Search database (default: 'both'):\n• 'arxiv': Search only arXiv preprints (faster, ML/CS focused, may miss published papers)\n• 'semantic_scholar': Search only Semantic Scholar (broader coverage, includes journals/conferences)\n• 'both': Search both databases for comprehensive results (recommended for literature reviews)")
 
 
-class CitationSearchTool(BaseTool):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+class CitationSearchTool:
     name: str = "citation_search_tool"
     description: str = """
     Search for academic papers and generate properly formatted citations for LaTeX papers.
@@ -57,7 +54,6 @@ class CitationSearchTool(BaseTool):
     Input: Search query or paper title/author
     Output: Structured citations with BibTeX entries and metadata
     """
-    args_schema: Type[BaseModel] = CitationSearchToolInput
     arxiv_base_url: str = "http://export.arxiv.org/api/query?"
     semantic_scholar_base_url: str = "https://api.semanticscholar.org/graph/v1/paper/search"
     semantic_scholar_max_retries: int = 3
@@ -112,7 +108,7 @@ class CitationSearchTool(BaseTool):
             self._cache.pop(oldest_key, None)
         self._cache[key] = {"value": value, "created_at": time.time()}
 
-    def _run(self, search_query: str, max_results: Optional[int] = None, search_source: Optional[str] = None) -> str:
+    def run(self, search_query: str, max_results: Optional[int] = None, search_source: Optional[str] = None) -> str:
         """
         Search for academic papers and generate citations.
 

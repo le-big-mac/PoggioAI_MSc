@@ -31,7 +31,7 @@ def main():
         from consortium.toolkits.math.claim_graph_tool import MathClaimGraphTool
 
         tool = MathClaimGraphTool(working_dir=args.workspace)
-        result = tool._run(
+        result = tool.run(
             action=args.action,
             claim_id=args.claim_id,
             statement=args.statement,

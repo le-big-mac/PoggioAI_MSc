@@ -8,59 +8,10 @@ import json
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Type
-
-from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Dict, List, Optional
 
 
-class MathClaimGraphToolInput(BaseModel):
-    action: str = Field(description="Action name (init, add_claim, update_claim, set_status, add_dependency, get_claim, list_claims, validate_graph, list_lemmas, get_lemma, upsert_lemma, touch_lemma_usage)")
-    claim_id: Optional[str] = Field(default=None, description="Unique claim id (required for claim-specific actions)")
-    statement: Optional[str] = Field(default=None, description="Claim statement in plain text or LaTeX")
-    assumptions_json: Optional[str] = Field(default=None, description='JSON array of assumptions, e.g. ["A1","A2"]')
-    depends_on_json: Optional[str] = Field(default=None, description="JSON array of dependency claim ids")
-    tags_json: Optional[str] = Field(default=None, description="JSON array of tags")
-    status: Optional[str] = Field(default=None, description="Claim status (proposed, proved_draft, verified_symbolic, verified_numeric, accepted, rejected)")
-    notes: Optional[str] = Field(default=None, description="Optional notes for the claim")
-    must_accept: Optional[bool] = Field(default=None, description="Whether this claim is required for run completion")
-    workspace_subdir: Optional[str] = Field(default=None, description="Workspace subdir where claim_graph.json lives (default: math_workspace)")
-    lemma_id: Optional[str] = Field(default=None, description="Lemma id for lemma-library actions")
-    lemma_tier: Optional[str] = Field(default=None, description="Lemma tier (tier0, tier1, tier2, tier3)")
-    lemma_statement: Optional[str] = Field(default=None, description="Canonical lemma statement")
-    lemma_conditions: Optional[str] = Field(default=None, description="Conditions/assumptions required by lemma")
-    lemma_source: Optional[str] = Field(default=None, description="Source pointer (book/paper/internal note)")
-    lemma_usage_notes: Optional[str] = Field(default=None, description="One-line usage guidance for this project")
-    lemma_tags_json: Optional[str] = Field(default=None, description="JSON array of lemma tags")
-    lemma_status: Optional[str] = Field(default=None, description="Lemma status (active, deprecated, draft)")
-    lemma_limit: Optional[int] = Field(default=None, description="Optional max number of lemmas returned by list_lemmas")
-
-
-class MathClaimGraphTool(BaseTool):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    name: str = "math_claim_graph_tool"
-    description: str = """
-    Manage a shared math claim graph at math_workspace/claim_graph.json.
-
-    Use this tool to initialize the graph, add/update claims, connect dependencies,
-    validate structural consistency, list progress by status, and maintain an
-    incremental lemma library index to avoid wasting tokens on full-file rewrites.
-
-    Actions:
-    - init
-    - add_claim
-    - update_claim
-    - set_status
-    - add_dependency
-    - get_claim
-    - list_claims
-    - validate_graph
-    - list_lemmas
-    - get_lemma
-    - upsert_lemma
-    - touch_lemma_usage
-    """
-    args_schema: Type[BaseModel] = MathClaimGraphToolInput
+class MathClaimGraphTool:
     working_dir: Optional[str] = None
     allow_accepted_transition: bool = False
 
@@ -88,13 +39,10 @@ class MathClaimGraphTool(BaseTool):
         allow_accepted_transition: bool = False,
         **kwargs: Any,
     ):
-        super().__init__(
-            working_dir=os.path.abspath(working_dir) if working_dir else None,
-            allow_accepted_transition=bool(allow_accepted_transition),
-            **kwargs,
-        )
+        self.working_dir = os.path.abspath(working_dir) if working_dir else None
+        self.allow_accepted_transition = bool(allow_accepted_transition)
 
-    def _run(
+    def run(
         self,
         action: str,
         claim_id: Optional[str] = None,

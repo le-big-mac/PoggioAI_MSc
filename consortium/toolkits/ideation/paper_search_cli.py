@@ -14,7 +14,7 @@ def main():
         from consortium.toolkits.ideation.paper_search_tool import PaperSearchTool
 
         tool = PaperSearchTool()
-        result = tool._run(query=args.query, result_limit=args.limit)
+        result = tool.run(query=args.query, result_limit=args.limit)
         print(result)
     except Exception as e:
         print(json.dumps({"error": str(e)}))

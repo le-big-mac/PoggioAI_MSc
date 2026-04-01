@@ -13,16 +13,6 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.research_plan_writeup_instructions import get_research_plan_writeup_system_prompt
-from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
-from ..toolkits.writeup.citation_search_tool import CitationSearchTool
-
-
-def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
-    tools = [
-        LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
-        CitationSearchTool(),
-    ]
-    return tools
 
 
 def build_node(
@@ -31,10 +21,8 @@ def build_node(
     authorized_imports: Optional[List[str]] = None,
     **cfg: Any,
 ) -> Callable:
-    from ..toolkits.model_utils import get_raw_model
-    model_id = get_raw_model(model)
-    tools = get_tools(workspace_dir, model_id)
-    system_prompt = get_research_plan_writeup_system_prompt(tools=tools, managed_agents=None)
+    tools = []
+    system_prompt = get_research_plan_writeup_system_prompt(tools=[], managed_agents=None)
     counsel_models = cfg.get("counsel_models")
     if counsel_models is not None:
         from ..counsel import create_counsel_node

@@ -15,7 +15,7 @@ def main():
         from consortium.toolkits.search.fetch_arxiv_papers.fetch_arxiv_papers_tools import FetchArxivPapersTool
 
         tool = FetchArxivPapersTool(working_dir=args.output_dir)
-        result = tool._run(search_query=args.query, max_results=args.max_results)
+        result = tool.run(search_query=args.query, max_results=args.max_results)
         print(result)
     except Exception as e:
         print(json.dumps({"error": str(e)}))

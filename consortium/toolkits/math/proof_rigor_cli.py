@@ -17,7 +17,7 @@ def main():
         from consortium.toolkits.math.proof_rigor_checker_tool import MathProofRigorCheckerTool
 
         tool = MathProofRigorCheckerTool(working_dir=args.workspace)
-        result = tool._run(
+        result = tool.run(
             claim_id=args.claim_id,
             proof_text=args.proof_text,
             check_level=args.check_level,

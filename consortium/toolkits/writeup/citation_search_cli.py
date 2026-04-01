@@ -14,7 +14,7 @@ def main():
     try:
         from .citation_search_tool import CitationSearchTool
         tool = CitationSearchTool()
-        result = tool._run(args.query, max_results=args.limit, search_source=args.source)
+        result = tool.run(args.query, max_results=args.limit, search_source=args.source)
         print(result)
     except Exception as e:
         json.dump({"error": str(e)}, sys.stdout, indent=2)
