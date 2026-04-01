@@ -14,7 +14,7 @@
 
 # --- Default CLI backend ---
 default_backend: claude              # claude | codex | gemini
-default_model: claude-sonnet-4-6     # model flag passed to the CLI tool
+default_model: claude-opus-4-6     # model flag passed to the CLI tool
 timeout_seconds: 3600                # max wall-clock seconds per agent invocation
 
 # --- Budget enforcement (invocation / wall-clock based) ---
@@ -50,8 +50,8 @@ budget:
 # --- Persona council (V2 pipeline) ---
 persona_council:
   max_debate_rounds: 3
-  synthesis_model: claude-sonnet-4-6
+  synthesis_model: claude-opus-4-6
 
 # --- Duality check model ---
 duality_check:
-  model: claude-sonnet-4-6
+  model: claude-opus-4-6
