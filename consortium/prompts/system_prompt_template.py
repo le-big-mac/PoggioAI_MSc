@@ -213,11 +213,11 @@ def build_system_prompt(tools, instructions, workspace_guidance, managed_agents=
 # Specialized tools that CLI agents don't have natively.
 # Listed as shell commands the CLI agent can invoke.
 _CLI_TOOL_COMMANDS = {
+    "paper_search": "python -m consortium.toolkits.ideation.paper_search_cli --query '<query>' --limit 10",
     "arxiv_search": "python -m consortium.toolkits.search.fetch_arxiv_papers.cli_entry --query '<query>' --max-results 10",
-    "latex_compile": "python -m consortium.toolkits.writeup.latex_compiler_cli --workspace .",
-    "claim_graph": "python -m consortium.toolkits.math.claim_graph_cli --workspace .",
-    "proof_rigor_check": "python -m consortium.toolkits.math.proof_rigor_cli --workspace .",
-    "paper_search": "python -m consortium.toolkits.search.paper_search_cli --query '<query>'",
+    "claim_graph": "python -m consortium.toolkits.math.claim_graph_cli --workspace . --action '<action>' [--claim-id '<id>'] [--statement '<text>']",
+    "proof_rigor_check": "python -m consortium.toolkits.math.proof_rigor_cli --workspace . [--claim-id '<id>'] [--check-level strict]",
+    "latex_compile": "pdflatex -interaction=nonstopmode <file.tex> && bibtex <file> && pdflatex -interaction=nonstopmode <file.tex>",
 }
 
 
