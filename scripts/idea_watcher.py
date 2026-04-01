@@ -114,8 +114,8 @@ def close_issue(repo: str, issue_number: int) -> None:
 # Slash command parsing
 # ---------------------------------------------------------------------------
 
-COMMANDS = {"plan", "run", "close"}
-MODIFIERS = {"counsel", "theory", "experiment"}
+COMMANDS = {"plan", "run", "experiment", "theory", "close"}
+MODIFIERS = {"counsel"}
 
 
 def parse_command(text: str) -> tuple[str | None, list[str], str]:
@@ -223,11 +223,11 @@ def _pipeline_args_for_command(command: str, modifiers: list[str]) -> list[str]:
     args = []
     if command == "plan":
         args.append("--quick-pass")
-    # Modifiers apply to any command
+    elif command == "theory":
+        args.append("--enable-math-agents")
+    # experiment and run use defaults (experiment track always on, theory off unless requested)
     if "counsel" in modifiers:
         args.append("--enable-counsel")
-    if "theory" in modifiers:
-        args.append("--enable-math-agents")
     return args
 
 
@@ -273,19 +273,20 @@ def _publish_and_comment(
             print(f"[watcher] Publish failed: {e}")
 
     if exit_code == 0:
-        mode = "Quick assessment" if command == "plan" else "Full analysis"
+        mode = {"plan": "Quick assessment", "run": "Full analysis",
+                "experiment": "Experiment analysis", "theory": "Theory analysis"}.get(command, "Analysis")
         body = f"**{mode} complete.**\n\n"
         if url_path:
             body += f"Read the results: [https://{domain}{url_path}](https://{domain}{url_path})\n\n"
         if workspace:
             body += f"Workspace: `{workspace}`\n"
-        body += "\nCommands: `plan`, `run`, `run counsel`, `run theory`, `run counsel theory`, `close`"
+        body += "\nCommands: `/plan`, `/run`, `/experiment`, `/theory`, `/close` (add `counsel` for 3-agent debate)"
         add_comment(repo, issue_number, body)
     else:
         body = f"**Run failed** (exit code {exit_code}).\n\n"
         if workspace:
             body += f"Check logs in `{workspace}`\n"
-        body += "\nRetry with: `plan`, `run`, `run counsel`, etc."
+        body += "\nRetry with: `/plan`, `/run`, `/experiment`, `/theory`"
         add_comment(repo, issue_number, body)
 
     return url_path
@@ -335,7 +336,8 @@ def handle_command(repo: str, issue: dict, command: str, modifiers: list[str], f
     task = build_task_with_feedback(idea, feedback, prior_plan)
     pipeline_args = _pipeline_args_for_command(command, modifiers)
 
-    mode = "quick assessment" if command == "plan" else "full analysis"
+    mode = {"plan": "quick assessment", "run": "full analysis",
+            "experiment": "experiment analysis", "theory": "theory analysis"}.get(command, "analysis")
     mod_str = f" ({', '.join(modifiers)})" if modifiers else ""
     msg = f"Starting {mode}{mod_str}..."
     if feedback:
