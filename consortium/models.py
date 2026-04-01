@@ -35,7 +35,7 @@ MODEL_REGISTRY: dict[str, dict] = {
     # Google Gemini models
     "gemini-2.5-pro": {"context_limit": 1_000_000, "provider": "google"},
     "gemini-2.5-flash": {"context_limit": 1_000_000, "provider": "google"},
-    "gemini-3-pro-preview": {"context_limit": 2_000_000, "provider": "google"},
+    "gemini-3.1-pro-preview": {"context_limit": 2_000_000, "provider": "google"},
 }
 
 AVAILABLE_MODELS = list(MODEL_REGISTRY.keys())

@@ -56,7 +56,7 @@ def cli_completion(
                 timeout=timeout, env=os.environ.copy(),
             )
         elif backend == "codex":
-            cmd = ["codex", "exec", "--full-auto"]
+            cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
             if model:
                 cmd.extend(["--model", model])
             result = subprocess.run(
@@ -64,7 +64,7 @@ def cli_completion(
                 timeout=timeout, env=os.environ.copy(),
             )
         elif backend == "gemini":
-            cmd = ["gemini"]
+            cmd = ["gemini", "--approval-mode", "yolo"]
             if model:
                 cmd.extend(["--model", model])
             result = subprocess.run(

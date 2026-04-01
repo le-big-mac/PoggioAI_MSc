@@ -47,7 +47,7 @@ from .prompts.duality_check_instructions import (
 DEFAULT_PERSONA_MODEL_SPECS: List[Dict[str, Any]] = [
     {"persona": "practical_compass",   "model": "claude-opus-4-6",      "reasoning_effort": "high"},
     {"persona": "rigor_novelty",       "model": "gpt-5.4",              "reasoning_effort": "high"},
-    {"persona": "narrative_architect",  "model": "gemini-3-pro-preview", "thinking_budget": 32768},
+    {"persona": "narrative_architect",  "model": "gemini-3.1-pro-preview", "thinking_budget": 32768},
 ]
 
 DEFAULT_SYNTHESIS_MODEL = "claude-opus-4-6"
@@ -264,11 +264,11 @@ THE PROPOSAL TO EVALUATE:
             cmd.extend(["--allowedTools",
                          "Read,Write,Edit,WebFetch,WebSearch,Bash(sleep*),Bash(cat*),Bash(ls*),Bash(touch*),Bash(while*),Bash(test*),Bash([*),Glob,Grep"])
         elif backend == "codex":
-            cmd = ["codex", "exec", "--full-auto"]
+            cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
             if model_id:
                 cmd.extend(["-m", model_id])
         elif backend == "gemini":
-            cmd = ["gemini"]
+            cmd = ["gemini", "--approval-mode", "yolo"]
             if model_id:
                 cmd.extend(["--model", model_id])
         else:
@@ -295,7 +295,10 @@ THE PROPOSAL TO EVALUATE:
             with open(eval_path) as f:
                 eval_text = f.read()
         else:
-            eval_text = stdout  # fallback to stdout if no file written
+            raise RuntimeError(
+                f"Persona {persona_name} ({backend}/{model_id}) did not write "
+                f"{eval_path}. Stdout ({len(stdout)} chars): {stdout[:500]}"
+            )
 
         verdict = _extract_verdict(eval_text)
         print(f"[persona_council] {persona_name} complete — verdict: {verdict}")

@@ -61,7 +61,7 @@ _DEFAULT_PLANNING_MODEL_SPECS = [
     {"model": "claude-opus-4-6", "reasoning_effort": "high"},
     {"model": "claude-sonnet-4-6", "reasoning_effort": "high"},
     {"model": "gpt-5.4", "reasoning_effort": "high", "verbosity": "high"},
-    {"model": "gemini-3-pro-preview", "thinking_budget": 65536},
+    {"model": "gemini-3.1-pro-preview", "thinking_budget": 65536},
 ]
 
 _SYNTHESIS_MODEL = "claude-opus-4-6"

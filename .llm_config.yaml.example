@@ -34,7 +34,7 @@ budget:
 #     model: gpt-5.4
 #   math_literature_agent:
 #     backend: gemini
-#     model: gemini-3-pro-preview
+#     model: gemini-3.1-pro-preview
 
 # --- Counsel mode (multi-model debate per agent stage) ---
 # counsel:
@@ -44,7 +44,7 @@ budget:
 #       backend: claude
 #     - model: gpt-5.4
 #       backend: codex
-#     - model: gemini-3-pro-preview
+#     - model: gemini-3.1-pro-preview
 #       backend: gemini
 
 # --- Persona council (V2 pipeline) ---

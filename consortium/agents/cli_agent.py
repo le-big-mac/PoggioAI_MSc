@@ -108,7 +108,7 @@ def _run_claude(prompt: str, workspace_dir: str, model: Optional[str],
 def _run_codex(prompt: str, workspace_dir: str, model: Optional[str],
                timeout: int) -> subprocess.CompletedProcess:
     """Run OpenAI Codex CLI in full-auto mode."""
-    cmd = ["codex", "exec", "--full-auto"]
+    cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
     if model:
         cmd.extend(["--model", model])
 
@@ -122,7 +122,7 @@ def _run_codex(prompt: str, workspace_dir: str, model: Optional[str],
 def _run_gemini(prompt: str, workspace_dir: str, model: Optional[str],
                 timeout: int) -> subprocess.CompletedProcess:
     """Run Gemini CLI."""
-    cmd = ["gemini"]
+    cmd = ["gemini", "--approval-mode", "yolo"]
     if model:
         cmd.extend(["--model", model])
 

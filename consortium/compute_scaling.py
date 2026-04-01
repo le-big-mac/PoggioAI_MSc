@@ -184,7 +184,7 @@ def build_counsel_specs(profile: ComputeProfile) -> list[dict]:
             "reasoning_effort": profile.gpt_reasoning_effort,
         },
         {
-            "model": "gemini-3-pro-preview",
+            "model": "gemini-3.1-pro-preview",
             "thinking_budget": profile.gemini_thinking_budget,
         },
     ]

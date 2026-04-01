@@ -91,11 +91,11 @@ def _run_cli_agent(
         cmd.extend(["--allowedTools",
                      "Edit,Read,Write,Bash,Glob,Grep"])
     elif backend == "codex":
-        cmd = ["codex", "exec", "--full-auto"]
+        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
         if model:
             cmd.extend(["--model", model])
     elif backend == "gemini":
-        cmd = ["gemini"]
+        cmd = ["gemini", "--approval-mode", "yolo"]
         if model:
             cmd.extend(["--model", model])
     else:

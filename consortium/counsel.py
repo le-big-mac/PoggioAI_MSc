@@ -48,7 +48,7 @@ def _model_to_backend(model_id: str) -> str:
 DEFAULT_COUNSEL_SPECS = [
     {"model": "claude-opus-4-6", "backend": "claude"},
     {"model": "gpt-5.4", "backend": "codex"},
-    {"model": "gemini-3-pro-preview", "backend": "gemini"},
+    {"model": "gemini-3.1-pro-preview", "backend": "gemini"},
 ]
 
 SYNTHESIS_BACKEND = "claude"
@@ -129,11 +129,11 @@ def _run_sandbox_cli_agent(
         cmd.extend(["--allowedTools",
                      "Edit,Read,Write,WebFetch,WebSearch,Bash,Glob,Grep"])
     elif backend == "codex":
-        cmd = ["codex", "exec", "--full-auto"]
+        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
         if model:
             cmd.extend(["--model", model])
     elif backend == "gemini":
-        cmd = ["gemini"]
+        cmd = ["gemini", "--approval-mode", "yolo"]
         if model:
             cmd.extend(["--model", model])
     else:
@@ -196,11 +196,11 @@ def _cli_agent_completion(
             "Read,Write,WebFetch,WebSearch,Bash(cat*),Bash(ls*),Bash(grep*),Bash(find*),Bash(python*),Bash(curl*),Glob,Grep",
         ])
     elif backend == "codex":
-        cmd = ["codex", "exec", "--full-auto"]
+        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
         if model:
             cmd.extend(["--model", model])
     elif backend == "gemini":
-        cmd = ["gemini"]
+        cmd = ["gemini", "--approval-mode", "yolo"]
         if model:
             cmd.extend(["--model", model])
     else:
