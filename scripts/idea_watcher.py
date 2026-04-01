@@ -64,28 +64,22 @@ def _send_whatsapp(message: str) -> None:
         print(f"[idea_watcher] WhatsApp delivery failed: {e}")
 
 
-def _find_latest_workspace(results_dir: str, before: float) -> str | None:
-    """Find the most recently created consortium_* workspace after `before` timestamp."""
-    if not os.path.isdir(results_dir):
-        return None
-    candidates = []
-    for name in os.listdir(results_dir):
-        path = os.path.join(results_dir, name)
-        if os.path.isdir(path) and name.startswith("consortium_"):
-            ctime = os.path.getctime(path)
-            if ctime >= before:
-                candidates.append((ctime, path))
-    if not candidates:
-        return None
-    candidates.sort(reverse=True)
-    return candidates[0][1]
+def _parse_workspace_from_output(stdout: str) -> str | None:
+    """Extract workspace path from pipeline stdout.
+
+    The runner prints 'Created workspace: results/consortium_{timestamp}'
+    on a new run, or 'Resuming from: ...' on a resume.
+    """
+    import re
+    for pattern in (r"Created workspace:\s*(.+)", r"Resuming from:\s*(.+)"):
+        m = re.search(pattern, stdout)
+        if m:
+            return m.group(1).strip()
+    return None
 
 
 def _launch_pipeline(idea_text: str, extra_args: list[str] | None = None) -> tuple[int, str | None]:
     """Launch a consortium pipeline run. Returns (exit_code, workspace_path)."""
-    results_dir = os.path.join(_REPO_ROOT, "results")
-    before = _time.time()
-
     cmd = [
         sys.executable,
         os.path.join(_REPO_ROOT, "launch_multiagent.py"),
@@ -96,10 +90,21 @@ def _launch_pipeline(idea_text: str, extra_args: list[str] | None = None) -> tup
         cmd.extend(extra_args)
 
     print(f"[idea_watcher] Launching: {' '.join(cmd[:6])}...")
-    result = subprocess.run(cmd, cwd=_REPO_ROOT)
+    result = subprocess.run(
+        cmd, cwd=_REPO_ROOT,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True,
+    )
 
-    # Find the workspace the pipeline created
-    workspace = _find_latest_workspace(results_dir, before)
+    # Stream output so it's still visible in logs
+    if result.stdout:
+        print(result.stdout, end="")
+
+    workspace = _parse_workspace_from_output(result.stdout or "")
+    # Resolve relative path from the pipeline's CWD
+    if workspace and not os.path.isabs(workspace):
+        workspace = os.path.join(_REPO_ROOT, workspace)
+
     return result.returncode, workspace
 
 
