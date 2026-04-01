@@ -231,6 +231,53 @@ Table with columns: Risk, Likelihood (low/medium/high), Impact (low/medium/high)
 Mitigation. Include at least 4 risks spanning theory, experiments, and narrative."""
 
 
+QUICK_PASS_SYNTHESIS_PROMPT = """You are the SYNTHESIS COORDINATOR for a quick-pass idea assessment.
+You have received evaluations of a DEVELOPED research proposal from three expert reviewers.
+
+Your task is to REFINE the proposal based on reviewer feedback, staying on the
+original research direction. Do NOT redesign or change the core research question.
+
+SYNTHESIS RULES:
+- If all three reviewers REJECT: the idea is UNVIABLE. Write a short explanation of
+  why this direction does not work, citing the specific fatal flaws identified. Begin
+  with "## Verdict: UNVIABLE" and explain. Do not propose an alternative direction.
+- If two or more ACCEPT: integrate the REJECT reviewer's concerns as refinements to
+  the existing proposal. Keep the same research question and hypotheses.
+- If only one ACCEPTS: address the two REJECT reviewers' concerns while staying on
+  the same direction. If their concerns are addressable, refine the proposal. If they
+  identify a genuinely fatal flaw (not just "needs more detail"), mark as UNVIABLE.
+- Never change the core research direction. Refine, sharpen, add detail — but this
+  is the user's idea and the user's direction.
+
+OUTPUT FORMAT (strict -- produce exactly these sections):
+
+## Research Question
+State the central research question in one precise sentence, followed by 2-3 sub-questions.
+
+## Motivation & Field Context
+Why this question matters NOW. Cite specific papers and observations.
+
+## Core Hypotheses
+Numbered list of falsifiable hypotheses with mechanisms and observables.
+
+## Methodology Overview
+
+### Theory Track Plan
+Concrete mathematical program: definitions, lemmas, theorems, proof strategies.
+
+### Experiment Track Plan
+Concrete experimental program: datasets, models, metrics, baselines, statistical tests.
+
+## Expected Contributions
+### Theory
+What new mathematical results will be established.
+### Practice
+What actionable principles practitioners will gain.
+
+## Risk Assessment
+Table with columns: Risk, Likelihood, Impact, Mitigation. At least 4 risks."""
+
+
 PERSONA_POST_SYNTHESIS_VOTE_PROMPT = """You are reviewing a SYNTHESIZED research proposal that was produced by integrating feedback from three expert reviewers (Practical Compass, Rigor & Novelty, Narrative Architect).
 
 Your task is to vote on whether this proposal is ready to proceed as written.

@@ -379,6 +379,96 @@ the LaTeX errors and try again.
     return quick_verdict_node
 
 
+def build_quick_develop_node(workspace_dir: str, cli_backend_registry=None) -> Any:
+    """Development agent: takes a raw half-baked idea and develops it into a
+    structured research proposal before the persona council evaluates it.
+
+    Reads any linked papers, fills in hypotheses/methods/experiments, and
+    writes a proper proposal — staying on the user's original direction.
+    """
+    import subprocess as _sp
+
+    def quick_develop_node(state: dict) -> dict:
+        from datetime import date as _date
+        task = state.get("task", "")
+        today = _date.today().isoformat()
+
+        prompt = f"""Today's date is {today}.
+
+You are a research development assistant. You have been given a rough, half-baked
+research idea. Your job is to develop it into a structured 1-2 page research proposal.
+
+IMPORTANT:
+- If the idea includes URLs or paper references, FETCH AND READ THEM. They are
+  central to the idea — do not proceed without reading them.
+- Stay on the user's original direction. Do not change the research question —
+  develop it, add detail, fill in gaps.
+- Propose specific hypotheses, methods, and experiments.
+- Identify what is novel and interesting about the direction.
+
+Write your proposal to: {workspace_dir}/paper_workspace/developed_proposal.md
+
+The proposal should have:
+- Research Question (one sentence + 2-3 sub-questions)
+- Motivation & Field Context (why this matters now, key related work)
+- Core Hypotheses (falsifiable, with mechanisms and observables)
+- Proposed Methods (theory plan + experiment plan with datasets, metrics, baselines)
+- Expected Contributions
+
+THE RAW IDEA:
+{task}
+"""
+        paper_ws = os.path.join(workspace_dir, "paper_workspace")
+        os.makedirs(paper_ws, exist_ok=True)
+
+        backend = "claude"
+        model = None
+        if cli_backend_registry is not None:
+            spec = cli_backend_registry.get("quick_develop")
+            backend = spec.backend
+            model = spec.model
+
+        cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "20"]
+        if model:
+            cmd.extend(["--model", model])
+        cmd.extend(["--allowedTools",
+                     "Read,Write,Edit,WebFetch,WebSearch,Bash(curl*),Bash(cat*),Bash(ls*),Bash(python*),Glob,Grep"])
+
+        if backend == "codex":
+            cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+            if model:
+                cmd.extend(["--model", model])
+        elif backend == "gemini":
+            cmd = ["gemini"]
+            if model:
+                cmd.extend(["--model", model])
+
+        print("[quick_develop] Developing raw idea into structured proposal...")
+        try:
+            _sp.run(
+                cmd, input=prompt, capture_output=True, text=True,
+                cwd=workspace_dir, timeout=600,
+                env=os.environ.copy(),
+            )
+        except (_sp.TimeoutExpired, FileNotFoundError) as e:
+            print(f"[quick_develop] Error: {e}")
+
+        # Read the developed proposal and use it as the task for persona council
+        developed_path = os.path.join(paper_ws, "developed_proposal.md")
+        if os.path.isfile(developed_path):
+            with open(developed_path) as f:
+                developed = f.read().strip()
+            if developed:
+                print(f"[quick_develop] Proposal developed ({len(developed)} chars)")
+                return {"task": developed}
+
+        print("[quick_develop] No developed proposal produced, passing raw idea to council")
+        return {}
+
+    quick_develop_node.__name__ = "quick_develop"
+    return quick_develop_node
+
+
 def quick_lit_review_gate_router(state: "ResearchState") -> str:
     """Lit review gate router for quick-pass: infeasible → verdict, not retry."""
     target = state.get("current_agent") or "brainstorm_agent"
@@ -412,13 +502,17 @@ def build_research_graph_quick(config: "ResearchGraphConfig"):
     def _wrap(node, name):
         return with_pdf_summary(node, name, workspace_dir, summary_model_id)
 
+    from .prompts.persona_instructions import QUICK_PASS_SYNTHESIS_PROMPT
+
     nodes: dict[str, Any] = {
+        "quick_develop": build_quick_develop_node(workspace_dir, cli_backend_registry),
         "persona_council": create_persona_council_node(
             workspace_dir=workspace_dir,
             persona_specs=persona_council_specs,
             max_debate_rounds=persona_debate_rounds,
             synthesis_model=persona_synthesis_model,
             max_post_vote_retries=persona_max_post_vote_retries,
+            synthesis_prompt_override=QUICK_PASS_SYNTHESIS_PROMPT,
         ),
         "literature_review_agent": _wrap(
             build_literature_review_node(_m("literature_review_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
@@ -446,7 +540,8 @@ def build_research_graph_quick(config: "ResearchGraphConfig"):
     for name, node in nodes.items():
         graph.add_node(name, node)
 
-    graph.set_entry_point("persona_council")
+    graph.set_entry_point("quick_develop")
+    graph.add_edge("quick_develop", "persona_council")
     graph.add_edge("persona_council", "literature_review_agent")
     graph.add_edge("literature_review_agent", "lit_review_gate")
     graph.add_conditional_edges(

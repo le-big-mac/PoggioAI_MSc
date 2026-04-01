@@ -50,8 +50,7 @@ def cli_completion(
             cmd = ["claude", "-p", "--output-format", "text"]
             if model:
                 cmd.extend(["--model", model])
-            # No tools for pure reasoning
-            cmd.extend(["--allowedTools", ""])
+            cmd.extend(["--allowedTools", "WebFetch,WebSearch,Read"])
             result = subprocess.run(
                 cmd, input=full_prompt, capture_output=True, text=True,
                 timeout=timeout, env=os.environ.copy(),

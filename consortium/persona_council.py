@@ -158,6 +158,7 @@ def run_persona_council(
     budget_manager: Optional[Any] = None,
     timeout_seconds: int = 600,
     max_post_vote_retries: int = 1,
+    synthesis_prompt_override: Optional[str] = None,
 ) -> Tuple[str, Dict[str, str]]:
     """
     Run a 3-persona debate to synthesize a research proposal.
@@ -339,7 +340,7 @@ def run_persona_council(
     try:
         proposal_text = cli_completion(
             synthesis_input,
-            system_prompt=PERSONA_SYNTHESIS_PROMPT,
+            system_prompt=synthesis_prompt_override or PERSONA_SYNTHESIS_PROMPT,
             backend=_model_to_backend(synthesis_model),
         ) or ""
     except Exception as e:
@@ -612,6 +613,7 @@ def create_persona_council_node(
     budget_manager: Optional[Any] = None,
     timeout_seconds: int = 600,
     max_post_vote_retries: int = 1,
+    synthesis_prompt_override: Optional[str] = None,
 ) -> Callable:
     """
     Return a LangGraph node callable that runs the persona council.
@@ -632,6 +634,7 @@ def create_persona_council_node(
             budget_manager=budget_manager,
             timeout_seconds=timeout_seconds,
             max_post_vote_retries=max_post_vote_retries,
+            synthesis_prompt_override=synthesis_prompt_override,
         )
 
         # Write artifacts to paper_workspace
