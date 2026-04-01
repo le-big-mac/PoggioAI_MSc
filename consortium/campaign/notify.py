@@ -4,7 +4,6 @@ Campaign notifications — dispatch status updates to external channels.
 Supports:
   - Slack incoming webhooks (SLACK_WEBHOOK_URL)
   - Telegram bot API (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)
-  - SMS via Twilio (TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM_NUMBER + SMS_TO_NUMBER)
   - Push notifications via ntfy.sh (NTFY_TOPIC)
   - stdout fallback (always)
 
@@ -57,13 +56,6 @@ def notify(
     if config.ntfy_topic:
         _ntfy(full_message, config.ntfy_topic, config.ntfy_server)
 
-    if config.twilio_account_sid and config.sms_to_number:
-        _sms(full_message, config.twilio_account_sid, config.twilio_auth_token,
-             config.twilio_from_number, config.sms_to_number)
-
-    if config.twilio_account_sid and config.whatsapp_from and config.whatsapp_to:
-        _whatsapp(full_message, config.twilio_account_sid, config.twilio_auth_token,
-                  config.whatsapp_from, config.whatsapp_to)
 
 
 def notify_stage_complete(stage_id: str, workspace: str, config: NotificationConfig) -> None:
@@ -184,34 +176,6 @@ def _ntfy(message: str, topic: str, server: Optional[str] = None) -> None:
     except Exception as e:
         print(f"[campaign:notify] ntfy delivery failed: {e}")
 
-
-def _sms(message: str, account_sid: str, auth_token: str,
-         from_number: str, to_number: str) -> None:
-    try:
-        resp = requests.post(
-            f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
-            auth=(account_sid, auth_token),
-            data={"From": from_number, "To": to_number, "Body": message[:1600]},
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"[campaign:notify] SMS delivery failed: {e}")
-
-
-def _whatsapp(message: str, account_sid: str, auth_token: str,
-              from_number: str, to_number: str) -> None:
-    """Send a WhatsApp message via Twilio (same API as SMS, whatsapp: prefix on numbers)."""
-    try:
-        resp = requests.post(
-            f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
-            auth=(account_sid, auth_token),
-            data={"From": from_number, "To": to_number, "Body": message[:1600]},
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"[campaign:notify] WhatsApp delivery failed: {e}")
 
 
 def _telegram_document(

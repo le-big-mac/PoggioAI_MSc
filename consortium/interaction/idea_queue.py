@@ -1,5 +1,5 @@
 """
-Idea queue — file-backed queue for research ideas submitted via WhatsApp or web form.
+Idea queue — file-backed queue for research ideas submitted via web form.
 
 Ideas are stored as JSON objects in a single file with file-locking to allow
 concurrent reads/writes from the webhook server and the heartbeat consumer.
@@ -9,7 +9,7 @@ Queue file format (ideas.json):
         {
             "id": "uuid",
             "idea": "research idea text",
-            "source": "whatsapp" | "webform",
+            "source": "webform",
             "sender": "+447...",
             "submitted_at": "2026-04-01T12:00:00Z",
             "status": "pending" | "running" | "completed" | "failed",
