@@ -1,32 +1,40 @@
 version: "3.9"
 
 services:
+  # ── Main: full pipeline with GPU, for ad-hoc runs ──────────────────────────
   consortium:
     build:
       context: .
-      target: full
-    image: consortium:latest
+      target: gpu
+    image: consortium:gpu
+    runtime: nvidia
     env_file:
       - .env
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=3
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
-      # Persist results and logs outside the container
       - ./results:/app/results
       - ./logs:/app/logs
-      # Mount config so you can edit it without rebuilding
       - ./.llm_config.yaml:/app/.llm_config.yaml:ro
     # Override command as needed:
     #   docker compose run consortium --task "Your research task" --no-counsel
     command: ["--help"]
 
-  # Idea receiver: webhook server (port 5003) + idea watcher polling loop
-  # Receives ideas via WhatsApp/web form, launches pipeline runs automatically
+  # ── Idea receiver: WhatsApp webhook + auto-launcher + GPU ──────────────────
+  # Receives ideas via WhatsApp/web form, launches pipeline runs automatically.
+  # Start with: docker compose up idea-receiver
   idea-receiver:
     build:
       context: .
       target: idea-receiver
     image: consortium:idea-receiver
+    runtime: nvidia
     env_file:
       - .env
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=3
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     ports:
       - "5003:5003"
     volumes:
@@ -36,7 +44,7 @@ services:
       - ./.llm_config.yaml:/app/.llm_config.yaml:ro
     restart: unless-stopped
 
-  # Minimal image: no web crawl, no Playwright — for quick/cheap runs
+  # ── Minimal: no web crawl, no Playwright, no GPU — for quick/cheap runs ────
   consortium-minimal:
     build:
       context: .
