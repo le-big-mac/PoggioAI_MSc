@@ -58,11 +58,10 @@ def _extract_title(workspace: Path, metadata: dict) -> str:
     """Extract a title from the workspace metadata or task."""
     task = metadata.get("task_preview", "")
     if task:
-        # Use first sentence or first 100 chars
-        first_sentence = task.split(".")[0].strip()
-        if len(first_sentence) > 100:
-            first_sentence = first_sentence[:97] + "..."
-        return first_sentence
+        # Use first line (issue title) or first sentence
+        first_line = task.split("\n")[0].strip()
+        if first_line:
+            return first_line[:100]
     return f"Research Run {workspace.name}"
 
 
