@@ -209,33 +209,13 @@ def run_persona_council(
             for p in peers
         )
 
-        # Build per-round barrier wait commands
         peer_files_str = " ".join(f"{coord_dir}/{p}.md" for p in peers)
-        round_instructions = []
-        for rnd in range(1, max_debate_rounds + 1):
-            if rnd == 1:
-                # Round 1: no barrier needed — step 2 already waited for initial evals
-                wait_step = "(No wait needed — you already read peer evaluations in step 2.)"
-            else:
-                # Round 2+: wait for peers to finish the previous round
-                prev = rnd - 1
-                wait_for_prev = " && ".join(
-                    f'while [ ! -f "{coord_dir}/{p}_round{prev}.done" ]; do sleep 3; done'
-                    for p in peers
-                )
-                wait_step = f"Wait for peers to finish round {prev}:\n     {wait_for_prev}\n   Then re-read their files: {peer_files_str}"
 
-            round_instructions.append(f"""
-DEBATE ROUND {rnd}:
-a) {wait_step}
-b) Write your round {rnd} critique — append it to {coord_dir}/{persona_name}.md
-   under a "## Debate Round {rnd}" heading. Focus on the single strongest reason
-   the proposal should be REJECTED from your lens. Be a harsh critic. Only concede
-   if evidence from another persona is overwhelming.
-c) Signal that you have completed round {rnd}:
-     touch {coord_dir}/{persona_name}_round{rnd}.done""")
-
-        debate_steps = "\n".join(round_instructions)
+        # Example wait command for round N (used in the prompt as a template)
+        wait_example = " && ".join(
+            f'while [ ! -f "{coord_dir}/{p}_round{{N}}.done" ]; do sleep 3; done'
+            for p in peers
+        )
 
         prompt = f"""{system_prompt}
 
@@ -252,15 +232,21 @@ Write your evaluation (assessment, strengths, gaps, initial verdict) to:
 STEP 2: WAIT FOR PEER EVALUATIONS
 Run this command to wait for the other personas to finish their evaluations:
   {wait_for_evals}
-Then read their evaluations from: {" ".join(f"{coord_dir}/{p}.md" for p in peers)}
+Then read their evaluations from: {peer_files_str}
 
 STEP 3: DEBATE ({max_debate_rounds} synchronized rounds)
-Each round has a barrier — you must wait for peers to finish the previous round
-before starting the next one. Follow these steps EXACTLY:
-{debate_steps}
+For each round N from 1 to {max_debate_rounds}:
+  a) If N > 1, wait for peers to finish round N-1 (replace {{N}} with the actual round):
+       {wait_example}
+     Then re-read peer files: {peer_files_str}
+     (Round 1 needs no wait — you already read peers in step 2.)
+  b) Append your critique to {coord_dir}/{persona_name}.md under "## Debate Round N".
+     Focus on the single strongest reason the proposal should be REJECTED from your
+     lens. Be a harsh critic. Only concede if evidence from another persona is overwhelming.
+  c) Signal completion: touch {coord_dir}/{persona_name}_roundN.done
 
 STEP 4: FINAL VERDICT
-After all debate rounds, append a final section to {coord_dir}/{persona_name}.md:
+Append to {coord_dir}/{persona_name}.md:
 ## Final Verdict
 VERDICT: ACCEPT or REJECT
 One-sentence justification.
