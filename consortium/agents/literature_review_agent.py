@@ -12,7 +12,6 @@ from ..prompts.literature_review_instructions import get_literature_review_syste
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.search.fetch_arxiv_papers.fetch_arxiv_papers_tools import FetchArxivPapersTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
@@ -20,7 +19,6 @@ def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
         PaperSearchTool(),
         FetchArxivPapersTool(working_dir=workspace_dir),
         CitationSearchTool(),
-        LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
     ]
 

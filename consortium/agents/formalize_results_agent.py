@@ -12,7 +12,6 @@ from ..prompts.formalize_results_instructions import get_formalize_results_syste
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.search.fetch_arxiv_papers.fetch_arxiv_papers_tools import FetchArxivPapersTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 from ..toolkits.writeup.latex_content_verification_tool import LaTeXContentVerificationTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
 
@@ -22,7 +21,6 @@ def get_tools(workspace_dir: Optional[str], model_id: str, authorized_imports: O
         PaperSearchTool(),
         FetchArxivPapersTool(working_dir=workspace_dir),
         CitationSearchTool(),
-        LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
         LaTeXContentVerificationTool(working_dir=workspace_dir),
     ]

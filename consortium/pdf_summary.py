@@ -50,53 +50,17 @@ AGENT_DISPLAY_NAMES: dict[str, str] = {
 _MAX_OUTPUT_CHARS = 50_000
 
 # ---------------------------------------------------------------------------
-# pdflatex discovery (mirrors LaTeXCompilerTool logic)
+# tectonic discovery
 # ---------------------------------------------------------------------------
 
 
-def _find_pdflatex_path() -> Optional[str]:
-    """Locate a usable pdflatex binary on the system."""
-    override = os.environ.get("CONSORTIUM_PDFLATEX_PATH", "").strip()
+def _find_tectonic_path() -> Optional[str]:
+    """Locate a usable tectonic binary on the system."""
+    override = os.environ.get("CONSORTIUM_TECTONIC_PATH", "").strip()
     if override and os.path.isfile(override) and os.access(override, os.X_OK):
         return override
-
-    # MacTeX default
-    mactex = "/Library/TeX/texbin/pdflatex"
-    if os.path.isfile(mactex) and os.access(mactex, os.X_OK):
-        return mactex
-
-    # which pdflatex
-    try:
-        result = subprocess.run(
-            ["which", "pdflatex"], capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            path = result.stdout.strip()
-            if os.path.isfile(path) and os.access(path, os.X_OK):
-                return path
-    except Exception:
-        pass
-
-    # Common install locations
-    common = [
-        "/usr/bin/pdflatex",
-        "/usr/local/bin/pdflatex",
-        "/Library/TeX/texbin/pdflatex",
-        "/opt/texlive/2025/bin/x86_64-linux/pdflatex",
-        "/usr/local/texlive/2025/bin/x86_64-linux/pdflatex",
-    ]
-    for p in common:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            return p
-
-    # Walk PATH
-    try:
-        for d in os.environ.get("PATH", "").split(os.pathsep):
-            candidate = os.path.join(d, "pdflatex")
-            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                return candidate
-    except Exception:
-        pass
+    import shutil
+    return shutil.which("tectonic")
 
     return None
 
@@ -265,45 +229,28 @@ AGENT OUTPUT TO FORMAT:
 
 
 def _compile_tex_to_pdf(tex_path: str) -> Optional[str]:
-    """Compile a .tex file to PDF. Returns the PDF path or None."""
-    pdflatex = _find_pdflatex_path()
-    if not pdflatex:
-        print("[pdf_summary] pdflatex not found — .tex file written but PDF skipped.")
+    """Compile a .tex file to PDF using tectonic. Returns the PDF path or None."""
+    tectonic = _find_tectonic_path()
+    if not tectonic:
+        print("[pdf_summary] tectonic not found — .tex file written but PDF skipped.")
         return None
 
     tex_dir = os.path.dirname(os.path.abspath(tex_path))
-    tex_filename = os.path.basename(tex_path)
     pdf_path = tex_path.replace(".tex", ".pdf")
 
-    env = os.environ.copy()
-    env["PATH"] = f"{os.path.dirname(pdflatex)}:{env.get('PATH', '')}"
-
     try:
-        # Two passes: first resolves references, second fills them in
-        # Use cwd= instead of os.chdir to avoid process-wide race conditions
-        for pass_num in range(1, 3):
-            result = subprocess.run(
-                [pdflatex, "-interaction=nonstopmode", tex_filename],
-                capture_output=True,
-                text=True,
-                timeout=120,
-                env=env,
-                cwd=tex_dir,
-            )
-            if result.returncode != 0 and pass_num == 1:
-                # Log but try second pass anyway (some warnings are non-fatal)
-                print(
-                    f"[pdf_summary] pdflatex pass {pass_num} returned {result.returncode}"
-                )
-
+        result = subprocess.run(
+            [tectonic, os.path.basename(tex_path)],
+            capture_output=True, text=True, timeout=120, cwd=tex_dir,
+        )
         if os.path.exists(pdf_path):
             return pdf_path
 
-        print("[pdf_summary] PDF not created despite compilation attempt.")
+        print(f"[pdf_summary] tectonic failed (rc={result.returncode}): {(result.stderr or '')[:300]}")
         return None
 
     except subprocess.TimeoutExpired:
-        print("[pdf_summary] pdflatex timed out.")
+        print("[pdf_summary] tectonic timed out.")
         return None
     except Exception as e:
         print(f"[pdf_summary] compilation error: {e}")

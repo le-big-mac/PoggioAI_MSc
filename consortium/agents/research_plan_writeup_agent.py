@@ -14,14 +14,12 @@ from typing import Any, Callable, List, Optional
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.research_plan_writeup_instructions import get_research_plan_writeup_system_prompt
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
 
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
-        LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
         CitationSearchTool(),
     ]
     return tools

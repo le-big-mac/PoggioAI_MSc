@@ -10,13 +10,11 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.experiment_transcription_instructions import get_experiment_transcription_system_prompt
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
 
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
-        LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
     ]
     return tools

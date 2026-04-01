@@ -9,8 +9,8 @@ DOCUMENT_FORMATTING_REQUIREMENTS = """DOCUMENT FORMATTING REQUIREMENTS (applies 
 - Use mathematical notation where appropriate (inline $...$ and display \\[...\\]).
 - Include proper citations using \\cite{} with keys from references.bib.
 - Use tables (tabular) for structured comparisons and itemize/enumerate for lists.
-- The document must compile cleanly with pdflatex.
-- After writing the .tex file, compile it to PDF using latex_compiler_tool.
+- The document must compile cleanly with tectonic.
+- After writing the .tex file, compile it to PDF using tectonic.
 """
 
 REPORT_FORMATTING_REQUIREMENTS = """REPORT FORMATTING REQUIREMENTS (applies to internal pipeline reports)
@@ -18,6 +18,6 @@ REPORT_FORMATTING_REQUIREMENTS = """REPORT FORMATTING REQUIREMENTS (applies to i
 - Use complete paragraphs with clear topic sentences and logical flow.
 - Use LaTeX sectioning (section, subsection, paragraph) for clear hierarchy.
 - Use tables (tabular) for structured comparisons and itemize/enumerate for lists.
-- The document must compile cleanly with pdflatex.
-- After writing the .tex file, compile it to PDF using latex_compiler_tool.
+- The document must compile cleanly with tectonic.
+- After writing the .tex file, compile it to PDF using tectonic.
 """

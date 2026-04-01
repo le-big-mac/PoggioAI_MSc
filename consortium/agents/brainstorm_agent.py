@@ -11,7 +11,6 @@ from ..agents.base_agent import create_specialist_agent
 from ..prompts.brainstorm_instructions import get_brainstorm_system_prompt
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.search.fetch_arxiv_papers.fetch_arxiv_papers_tools import FetchArxivPapersTool
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
 
 
@@ -19,7 +18,6 @@ def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
         PaperSearchTool(),
         FetchArxivPapersTool(working_dir=workspace_dir),
-        LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
     ]
     return tools

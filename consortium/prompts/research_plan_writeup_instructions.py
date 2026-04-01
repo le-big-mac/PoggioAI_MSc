@@ -44,7 +44,7 @@ Read and parse these files before writing:
    Cross-reference goals by their IDs using \\label and \\ref.
 
 2. **`paper_workspace/research_plan.pdf`** — Compiled version of the plan.
-   Use latex_compiler_tool to compile the .tex file.
+   Use tectonic to compile the .tex file.
 
 ## WRITEUP WORKFLOW
 
@@ -52,7 +52,7 @@ Read and parse these files before writing:
 2. Use LaTeXGeneratorTool to produce `research_plan.tex` with all required sections.
 3. Use LaTeXReflectionTool to iteratively improve the document quality.
 4. Use LaTeXSyntaxCheckerTool to validate syntax before compilation.
-5. Use LaTeXCompilerTool to compile to PDF.
+5. Use tectonic to compile to PDF.
 6. Use VLMDocumentAnalysisTool to visually verify the compiled PDF.
 
 ## LATEX FAILURE POLICY

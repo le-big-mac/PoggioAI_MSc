@@ -332,7 +332,7 @@ class LaTeXGeneratorTool(BaseTool):
         - Follow academic writing conventions
         - **MANDATORY**: Integrate citations using [cite: key] placeholder format (NOT \\cite{{}} directly)
           Example: [cite: rabiner1989tutorial] or [cite: Hidden Markov Models tutorial]
-          LaTeXCompilerTool will auto-resolve these placeholders
+          tectonic will auto-resolve these placeholders
         - Reference figures using \\ref{{fig:label}} format and include them with \\includegraphics{{figures/filename}}
         - Use ONLY the figures listed above with their exact filenames (including .png extension)
         - Figure paths are relative to the LaTeX document: figures/filename.png

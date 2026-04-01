@@ -22,7 +22,7 @@ from .args import parse_arguments
 from .config import load_llm_config
 from .interaction.callback_tools import setup_user_input_socket
 from .interaction.http_steering import add_http_steering
-from .prereqs import check_latex_prereqs
+# Legacy prereqs import removed — tectonic check is inline in main()
 from .supervision import sanitize_result_payload
 from .graph import build_pipeline_stages_v2, get_default_checkpointer
 from .utils import create_cli_backend_registry

@@ -10,14 +10,12 @@ from ..agents.base_agent import create_specialist_agent
 from ..prompts.experimentation_instructions import get_experimentation_system_prompt
 from ..toolkits.experimentation.idea_standardization_tool import IdeaStandardizationTool
 from ..toolkits.experimentation.run_experiment_tool import RunExperimentTool
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
         IdeaStandardizationTool(model=model_id),
         RunExperimentTool(workspace_dir=workspace_dir),
-        LaTeXCompilerTool(working_dir=workspace_dir, model=model_id),
     ]
     return tools
 

@@ -258,7 +258,7 @@ Examples:
         choices=["latex", "markdown"],
         default="latex",
         help="Output format for the final paper. 'latex' (default) produces final_paper.tex + PDF "
-             "(requires pdflatex). 'markdown' produces final_paper.md with no LaTeX dependency.",
+             "(requires tectonic). 'markdown' produces final_paper.md with no LaTeX dependency.",
     )
 
     parser.add_argument(

@@ -48,7 +48,7 @@ class LaTeXReflectionToolInput(BaseModel):
     )
     compilation_errors: Optional[str] = Field(
         default=None,
-        description="Raw LaTeX compilation errors from LaTeXCompilerTool to address specific syntax issues (optional)",
+        description="Raw LaTeX compilation errors from tectonic to address specific syntax issues (optional)",
     )
 
 

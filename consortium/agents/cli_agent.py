@@ -96,7 +96,7 @@ def _run_claude(prompt: str, workspace_dir: str, model: Optional[str],
         cmd.extend(["--allowedTools", ",".join(allowed_tools)])
     else:
         cmd.extend(["--allowedTools",
-                     "Edit,Read,Write,Bash(python*),Bash(ls*),Bash(cat*),Bash(grep*),Bash(find*),Bash(cd*),Bash(mkdir*),Bash(cp*),Bash(mv*),Bash(pip*),Bash(pdflatex*),Bash(bibtex*),Glob,Grep"])
+                     "Edit,Read,Write,Bash(python*),Bash(ls*),Bash(cat*),Bash(grep*),Bash(find*),Bash(cd*),Bash(mkdir*),Bash(cp*),Bash(mv*),Bash(pip*),Bash(tectonic*),Glob,Grep"])
 
     return subprocess.run(
         cmd, input=prompt, capture_output=True, text=True,

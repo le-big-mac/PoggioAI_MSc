@@ -9,7 +9,6 @@ from typing import Any, Callable, List, Optional
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.resource_preparation_instructions import get_resource_preparation_system_prompt
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 from ..toolkits.writeup.latex_content_verification_tool import LaTeXContentVerificationTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
 
@@ -17,7 +16,6 @@ from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
 def get_tools(workspace_dir: Optional[str], model_id: str, authorized_imports: Optional[List[str]] = None) -> list:
     tools = [
         CitationSearchTool(),
-        LaTeXCompilerTool(working_dir=workspace_dir, model=model_id),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
         LaTeXContentVerificationTool(working_dir=workspace_dir),
     ]

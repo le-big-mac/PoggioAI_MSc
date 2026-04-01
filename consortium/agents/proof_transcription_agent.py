@@ -13,7 +13,6 @@ from ..prompts.proof_transcription_instructions import get_proof_transcription_s
 from ..toolkits.math.claim_graph_tool import MathClaimGraphTool
 from ..toolkits.math.proof_workspace_tool import MathProofWorkspaceTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
@@ -21,7 +20,6 @@ def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
         MathClaimGraphTool(working_dir=workspace_dir),
         MathProofWorkspaceTool(working_dir=workspace_dir),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
-        LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
     ]
     return tools
 

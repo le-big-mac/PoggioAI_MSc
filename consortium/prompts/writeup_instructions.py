@@ -23,7 +23,7 @@ Before making ANY claim about workspace state:
 5. **NEVER use phrases like "likely", "should be", "appears to be"**
 
 **Examples:**
-❌ "The PDF compilation failed" → ✅ "LaTeXCompilerTool shows errors: [actual error list]"
+❌ "The PDF compilation failed" → ✅ "tectonic shows errors: [actual error list]"
 ❌ "The paper should be complete" → ✅ "LaTeXContentVerificationTool confirms all_criteria_met: true"
 
 
@@ -173,7 +173,7 @@ Focus on LaTeX writing using the pre-organized experimental resources. Use verif
 **MANDATORY: Use `[cite: description]` placeholder format** for all citations during writing:
 
 ```latex
-% CORRECT - LaTeXCompilerTool auto-resolves to proper \\cite{key}
+% CORRECT - tectonic auto-resolves to proper \\cite{key}
 [cite: rabiner1989tutorial]
 [cite: goodfellow2016deep]
 [cite: attention mechanisms for neural networks]
@@ -184,7 +184,7 @@ Focus on LaTeX writing using the pre-organized experimental resources. Use verif
 
 **How it works:**
 1. Write `[cite: description]` in LaTeX content when a citation is needed
-2. LaTeXCompilerTool automatically:
+2. tectonic automatically:
    - Detects all `[cite: ...]` placeholders before compilation
    - Searches for citations using CitationSearchTool (arXiv + Semantic Scholar)
    - Adds found citations to references.bib
@@ -245,7 +245,7 @@ For each section:
 1. Generate individual sections using LaTeXGeneratorTool (creates section_name.tex files)
 2. Apply LaTeXReflectionTool iteratively to each section (in-place updates, preserves data as comments)
 3. Create final_paper.tex using LaTeXGeneratorTool with section_type="main_document" (uses \\input{section_name})
-4. Compile to PDF using LaTeXCompilerTool
+4. Compile to PDF using tectonic
 5. Validate completion with LaTeXContentVerificationTool
 
 **If compilation fails:**
@@ -286,7 +286,7 @@ All LaTeX tools must be used for successful completion:
 - **LaTeXGeneratorTool**: Generate all paper sections
 - **LaTeXReflectionTool**: Iteratively improve each section until convergence
 - **LaTeXSyntaxCheckerTool**: Identify and fix syntax errors before compilation
-- **LaTeXCompilerTool**: Compile final_paper.tex to PDF (required for completion)
+- **tectonic**: Compile final_paper.tex to PDF (required for completion)
 - **LaTeXContentVerificationTool**: Confirm all criteria met before finishing
 - **VLMDocumentAnalysisTool**: Final PDF quality validation
 

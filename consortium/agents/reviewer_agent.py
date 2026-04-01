@@ -9,13 +9,11 @@ from typing import Any, Callable, List, Optional
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.reviewer_instructions import get_reviewer_system_prompt
 from ..toolkits.ideation.paper_search_tool import PaperSearchTool
-from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
         PaperSearchTool(),
-        LaTeXCompilerTool(working_dir=workspace_dir, model=model_id),
     ]
     return tools
 
