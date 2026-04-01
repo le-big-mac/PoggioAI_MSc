@@ -1,7 +1,6 @@
 # CLI-agent-only: agents run as local CLI tools (claude/codex/gemini).
-# No API client libraries (litellm, openai, anthropic) needed.
+# No API client libraries (litellm, openai, anthropic, langchain-core) needed.
 langgraph>=0.4.0
-langchain-core>=0.3.0
 pyyaml==6.0.3
 python-dotenv==1.2.1
 requests==2.32.5

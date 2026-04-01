@@ -15,7 +15,6 @@ license = { text = "MIT" }
 # no API client libraries needed for LLM calls.
 dependencies = [
     "langgraph>=0.4.0",
-    "langchain-core>=0.3.0",
     "pyyaml==6.0.3",
     "python-dotenv==1.2.1",
     "requests==2.32.5",
