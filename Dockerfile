@@ -138,7 +138,9 @@ FROM gpu AS idea-receiver
 
 EXPOSE 5003
 ENTRYPOINT []
-CMD ["sh", "-c", "python -m consortium.interaction.webhook_server --port 5003 & python scripts/idea_watcher.py --interval 30"]
+# Start both processes; exit (triggering restart) if either dies.
+# Uses bash for `wait -n` which returns when any child exits.
+CMD ["bash", "-c", "[ -f /app/ideas.json ] || echo '[]' > /app/ideas.json; python -m consortium.interaction.webhook_server --port 5003 & python scripts/idea_watcher.py --interval 30 & wait -n; exit 1"]
 
 # Default target is full (CPU)
 FROM full

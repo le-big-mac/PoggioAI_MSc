@@ -40,6 +40,8 @@ services:
     volumes:
       - ./results:/app/results
       - ./logs:/app/logs
+      # Queue file — create before first run: touch ideas.json
+      # Docker bind-mounts a missing file as a directory, so it must exist.
       - ./ideas.json:/app/ideas.json
       - ./.llm_config.yaml:/app/.llm_config.yaml:ro
     restart: unless-stopped

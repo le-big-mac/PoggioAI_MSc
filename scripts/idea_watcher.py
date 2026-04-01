@@ -79,9 +79,13 @@ def _parse_workspace_from_output(stdout: str) -> str | None:
 
 
 def _launch_pipeline(idea_text: str, extra_args: list[str] | None = None) -> tuple[int, str | None]:
-    """Launch a consortium pipeline run. Returns (exit_code, workspace_path)."""
+    """Launch a consortium pipeline run. Returns (exit_code, workspace_path).
+
+    Streams output line-by-line so logs are visible in real time, while
+    also capturing workspace path from the output.
+    """
     cmd = [
-        sys.executable,
+        sys.executable, "-u",  # unbuffered so lines appear immediately
         os.path.join(_REPO_ROOT, "launch_multiagent.py"),
         "--task", idea_text,
         "--no-steering",
@@ -90,22 +94,28 @@ def _launch_pipeline(idea_text: str, extra_args: list[str] | None = None) -> tup
         cmd.extend(extra_args)
 
     print(f"[idea_watcher] Launching: {' '.join(cmd[:6])}...")
-    result = subprocess.run(
+    workspace = None
+
+    proc = subprocess.Popen(
         cmd, cwd=_REPO_ROOT,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True,
+        text=True, bufsize=1,  # line-buffered
     )
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        # Parse workspace path on the fly
+        if workspace is None:
+            ws = _parse_workspace_from_output(line)
+            if ws:
+                workspace = ws
 
-    # Stream output so it's still visible in logs
-    if result.stdout:
-        print(result.stdout, end="")
+    proc.wait()
 
-    workspace = _parse_workspace_from_output(result.stdout or "")
     # Resolve relative path from the pipeline's CWD
     if workspace and not os.path.isabs(workspace):
         workspace = os.path.join(_REPO_ROOT, workspace)
 
-    return result.returncode, workspace
+    return proc.returncode, workspace
 
 
 def process_one(queue_path: str | None, extra_args: list[str] | None = None) -> bool:

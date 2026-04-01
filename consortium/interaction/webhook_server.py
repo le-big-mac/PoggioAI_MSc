@@ -35,10 +35,11 @@ Environment variables:
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import os
-from urllib.parse import urlencode
+from xml.sax.saxutils import escape as xml_escape
 
 from flask import Flask, request, jsonify, Response
 
@@ -46,7 +47,11 @@ from .idea_queue import submit_idea, list_ideas
 
 
 def _validate_twilio_signature(url: str, params: dict, signature: str, auth_token: str) -> bool:
-    """Validate Twilio webhook signature (X-Twilio-Signature header)."""
+    """Validate Twilio webhook signature (X-Twilio-Signature header).
+
+    Twilio computes HMAC-SHA1 over: URL + sorted(param key+value pairs),
+    then base64-encodes the digest.
+    """
     sorted_params = sorted(params.items())
     data = url + "".join(f"{k}{v}" for k, v in sorted_params)
     expected = hmac.new(
@@ -54,9 +59,22 @@ def _validate_twilio_signature(url: str, params: dict, signature: str, auth_toke
         data.encode("utf-8"),
         hashlib.sha1,
     ).digest()
-    import base64
     expected_b64 = base64.b64encode(expected).decode("utf-8")
     return hmac.compare_digest(expected_b64, signature)
+
+
+def _get_twilio_url(req) -> str:
+    """Get the URL Twilio signed against.
+
+    Behind a reverse proxy (ngrok, cloudflare tunnel, etc.), request.url
+    may show http:// but Twilio signed the https:// URL it actually called.
+    Use X-Forwarded-Proto to reconstruct the correct URL.
+    """
+    url = req.url
+    forwarded_proto = req.headers.get("X-Forwarded-Proto")
+    if forwarded_proto and url.startswith("http://"):
+        url = "https://" + url[len("http://"):]
+    return url
 
 
 def create_app(queue_path: str | None = None) -> Flask:
@@ -65,13 +83,10 @@ def create_app(queue_path: str | None = None) -> Flask:
     @app.route("/whatsapp", methods=["POST"])
     def whatsapp_webhook():
         """Receive an incoming WhatsApp message from Twilio."""
-        # Twilio sends form-encoded data
         body = request.form.get("Body", "").strip()
         sender = request.form.get("From", "")  # e.g. whatsapp:+447...
-        num_media = int(request.form.get("NumMedia", "0"))
 
         if not body:
-            # Respond with TwiML — empty reply
             return Response(
                 '<?xml version="1.0" encoding="UTF-8"?><Response/>',
                 content_type="text/xml",
@@ -81,11 +96,10 @@ def create_app(queue_path: str | None = None) -> Flask:
         auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
         if auth_token:
             sig = request.headers.get("X-Twilio-Signature", "")
-            url = request.url
+            url = _get_twilio_url(request)
             if not _validate_twilio_signature(url, request.form.to_dict(), sig, auth_token):
                 return Response("Forbidden", status=403)
 
-        # Submit the idea
         entry = submit_idea(
             idea=body,
             source="whatsapp",
@@ -93,7 +107,7 @@ def create_app(queue_path: str | None = None) -> Flask:
             queue_path=queue_path,
         )
 
-        # Respond with TwiML acknowledgement
+        # TwiML response — XML-escape all user-controlled text
         reply = (
             f"Got it! Your research idea has been queued for investigation.\n"
             f"ID: {entry['id'][:8]}\n"
@@ -101,14 +115,13 @@ def create_app(queue_path: str | None = None) -> Flask:
         )
         twiml = (
             '<?xml version="1.0" encoding="UTF-8"?>'
-            f"<Response><Message>{reply}</Message></Response>"
+            f"<Response><Message>{xml_escape(reply)}</Message></Response>"
         )
         return Response(twiml, content_type="text/xml")
 
     @app.route("/idea", methods=["POST"])
     def submit_idea_api():
         """Receive an idea via JSON POST (web form / programmatic)."""
-        # Optional bearer token auth
         expected_token = os.environ.get("WEBHOOK_AUTH_TOKEN")
         if expected_token:
             auth_header = request.headers.get("Authorization", "")
