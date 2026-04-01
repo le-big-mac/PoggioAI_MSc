@@ -129,7 +129,7 @@ def _run_sandbox_cli_agent(
         cmd.extend(["--allowedTools",
                      "Edit,Read,Write,WebFetch,WebSearch,Bash,Glob,Grep"])
     elif backend == "codex":
-        cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+        cmd = ["codex", "exec", "--full-auto"]
         if model:
             cmd.extend(["--model", model])
     elif backend == "gemini":
@@ -196,7 +196,7 @@ def _cli_agent_completion(
             "Read,Write,WebFetch,WebSearch,Bash(cat*),Bash(ls*),Bash(grep*),Bash(find*),Bash(python*),Bash(curl*),Glob,Grep",
         ])
     elif backend == "codex":
-        cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+        cmd = ["codex", "exec", "--full-auto"]
         if model:
             cmd.extend(["--model", model])
     elif backend == "gemini":

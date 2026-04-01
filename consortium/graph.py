@@ -325,7 +325,7 @@ the LaTeX errors and try again.
                      "Read,Write,Edit,WebFetch,WebSearch,Bash(tectonic*),Bash(cat*),Bash(ls*),Bash(curl*),Grep,Glob"])
 
         if backend == "codex":
-            cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+            cmd = ["codex", "exec", "--full-auto"]
             if model:
                 cmd.extend(["--model", model])
         elif backend == "gemini":
@@ -435,7 +435,7 @@ THE RAW IDEA:
                      "Read,Write,Edit,WebFetch,WebSearch,Bash(curl*),Bash(cat*),Bash(ls*),Bash(python*),Glob,Grep"])
 
         if backend == "codex":
-            cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+            cmd = ["codex", "exec", "--full-auto"]
             if model:
                 cmd.extend(["--model", model])
         elif backend == "gemini":

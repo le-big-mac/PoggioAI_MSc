@@ -56,7 +56,7 @@ def cli_completion(
                 timeout=timeout, env=os.environ.copy(),
             )
         elif backend == "codex":
-            cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+            cmd = ["codex", "exec", "--full-auto"]
             if model:
                 cmd.extend(["--model", model])
             result = subprocess.run(

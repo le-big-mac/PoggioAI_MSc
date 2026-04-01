@@ -91,7 +91,7 @@ def _run_cli_agent(
         cmd.extend(["--allowedTools",
                      "Edit,Read,Write,Bash,Glob,Grep"])
     elif backend == "codex":
-        cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+        cmd = ["codex", "exec", "--full-auto"]
         if model:
             cmd.extend(["--model", model])
     elif backend == "gemini":

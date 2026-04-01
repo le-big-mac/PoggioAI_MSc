@@ -108,7 +108,7 @@ def _run_claude(prompt: str, workspace_dir: str, model: Optional[str],
 def _run_codex(prompt: str, workspace_dir: str, model: Optional[str],
                timeout: int) -> subprocess.CompletedProcess:
     """Run OpenAI Codex CLI in full-auto mode."""
-    cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+    cmd = ["codex", "exec", "--full-auto"]
     if model:
         cmd.extend(["--model", model])
 
