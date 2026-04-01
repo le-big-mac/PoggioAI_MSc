@@ -234,9 +234,13 @@ def adapt_prompt_for_cli(instructions: str, workspace_dir: str, agent_name: str)
         f"  {name}: {cmd}" for name, cmd in _CLI_TOOL_COMMANDS.items()
     )
 
+    from datetime import date as _date
+    today = _date.today().isoformat()
+
     return f"""You are "{agent_name}" — a specialist agent in a multi-agent math research pipeline.
 
 ## Environment
+- Today's date is {today}. Your training data may be outdated — always search for recent work.
 - Your working directory is the research workspace: {workspace_dir}
 - Files from previous pipeline stages are already present — read them to understand context.
 - Write all your output files to the workspace or its subdirectories.
@@ -246,6 +250,12 @@ def adapt_prompt_for_cli(instructions: str, workspace_dir: str, agent_name: str)
 These are available as shell commands for domain-specific tasks that go beyond
 standard file I/O and code execution:
 {tool_lines}
+
+## Important: Use Up-to-Date Information
+- Your knowledge has a cutoff date. For any claims about the state of the field,
+  recent results, or SOTA, search the web or arXiv to verify and find the latest work.
+- When citing papers, verify they exist and check for more recent follow-ups.
+- Prefer citing 2025-2026 papers where available over older references.
 
 ## Your Mission
 {instructions}
