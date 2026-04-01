@@ -239,11 +239,21 @@ def build_post(workspace: Path, site_repo: Path, issue_number: int | None = None
         secs = budget.get("total_seconds", 0)
         budget_text = f"{invocations} agent invocations, {secs / 60:.0f} min wall-clock"
 
+    # Author from the coordinating model
+    cli_model = metadata.get("cli_model", summary.get("cli_model", ""))
+    cli_backend = metadata.get("cli_backend", summary.get("cli_backend", ""))
+    if cli_model:
+        author = cli_model
+    elif cli_backend:
+        author = cli_backend
+    else:
+        author = "Consortium AI"
+
     content = f"""---
 layout: research-post
 title: "{title}"
 date: {date}
-author: "PoggioAI Consortium"
+author: "{author}"
 status: "{status}"
 pipeline_run: "{run_id}"{issue_line}{pdf_line}
 ---
@@ -251,8 +261,6 @@ pipeline_run: "{run_id}"{issue_line}{pdf_line}
 > **Task:** {task[:500]}
 
 {verdict_text}
-
-{'[Read the full paper (PDF)](' + pdf_asset + ')' if pdf_asset else '*No PDF available — check workspace for .tex files.*'}
 
 {budget_text}
 """

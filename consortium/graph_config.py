@@ -131,7 +131,7 @@ class ResearchGraphConfig:
     authorized_imports: Optional[List[str]] = None
 
     # -- model configuration -----------------------------------------------
-    summary_model_id: Optional[str] = "claude-sonnet-4-6"
+    summary_model_id: Optional[str] = "claude-opus-4-6"
 
     # -- runtime objects (excluded from serialization) ---------------------
     checkpointer: Any = field(default=None, repr=False)
@@ -198,7 +198,7 @@ class ResearchGraphConfig:
             followup_max_iterations=data.get("followup_max_iterations", 3),
             manager_max_steps=data.get("manager_max_steps", 50),
             authorized_imports=data.get("authorized_imports"),
-            summary_model_id=data.get("summary_model_id", "claude-sonnet-4-6"),
+            summary_model_id=data.get("summary_model_id", "claude-opus-4-6"),
             checkpointer=checkpointer,
             tree_search=tree_cfg,
             persona_council=PersonaCouncilConfig.from_dict(

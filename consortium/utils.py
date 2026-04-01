@@ -51,7 +51,7 @@ class CLIBackendSpec:
     """
 
     backend: str          # "claude" | "codex" | "gemini"
-    model: Optional[str] = None  # e.g. "claude-sonnet-4-6", "gpt-5.4"
+    model: Optional[str] = None  # e.g. "claude-opus-4-6", "gpt-5.4"
     timeout_seconds: int = 3600
 
 
@@ -81,7 +81,7 @@ def create_cli_backend_registry(llm_config: dict) -> CLIBackendRegistry:
     Expected top-level keys in the config::
 
         default_backend: claude
-        default_model: claude-sonnet-4-6
+        default_model: claude-opus-4-6
         timeout_seconds: 3600
         agent_backends:
           math_prover_agent:
