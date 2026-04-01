@@ -184,8 +184,21 @@ def _copy_images(workspace: Path, site_repo: Path, run_id: str) -> str:
     return f"/assets/images/research/{run_id}"
 
 
-def build_post(workspace: Path, site_repo: Path, issue_number: int | None = None) -> tuple[str, str]:
-    """Build a Jekyll research post from a workspace. Returns (filename, content)."""
+def _find_pdf(workspace: Path) -> Path | None:
+    """Find the final PDF in the workspace."""
+    for candidate in ["final_paper.pdf", "paper_workspace/final_paper.pdf"]:
+        path = workspace / candidate
+        if path.exists():
+            return path
+    return None
+
+
+def build_post(workspace: Path, site_repo: Path, issue_number: int | None = None) -> tuple[str, str, Path | None]:
+    """Build a Jekyll research post from a workspace.
+
+    Returns (md_filename, md_content, pdf_source_path_or_None).
+    The caller should copy the PDF to assets/ if present.
+    """
     run_id = workspace.name
     metadata = _read_json(str(workspace / "experiment_metadata.json"))
     summary = _read_json(str(workspace / "run_summary.json"))
@@ -195,55 +208,55 @@ def build_post(workspace: Path, site_repo: Path, issue_number: int | None = None
     slug = _slugify(title)
     filename = f"{date}-{slug}.md"
 
-    # Copy images
-    _copy_images(workspace, site_repo, run_id)
-
-    # Build sections
-    sections = []
-
-    proposal = _extract_proposal(workspace)
-    if proposal:
-        sections.append(f"## Research Proposal\n\n{proposal}")
-
-    claims = _extract_claims(workspace)
-    if claims:
-        sections.append(claims)
-
-    experiments = _extract_experiments(workspace)
-    if experiments:
-        sections.append(experiments)
-
-    paper = _extract_paper(workspace)
-    if paper:
-        sections.append(f"## Paper\n\n{paper}")
-
-    budget = _extract_budget(workspace)
-    if budget:
-        sections.append(budget)
-
-    # Compose
     task = metadata.get("task_preview", summary.get("task", ""))
     status = "complete" if (workspace / "STATUS.txt").exists() else "in_progress"
+    verdict = _read_json(str(workspace / "quick_pass_verdict.json"))
 
-    body = "\n\n---\n\n".join(sections) if sections else "*No results found in workspace.*"
+    # PDF path (relative to site root, for the link)
+    pdf_source = _find_pdf(workspace)
+    pdf_asset = f"/assets/research/{run_id}/final_paper.pdf" if pdf_source else None
 
     issue_line = f'\nissue_number: {issue_number}' if issue_number else ''
+    pdf_line = f'\npdf: "{pdf_asset}"' if pdf_asset else ''
+
+    # Verdict summary
+    verdict_text = ""
+    if verdict:
+        feasible = verdict.get("feasible", True)
+        open_c = verdict.get("open_claims", "?")
+        total_c = verdict.get("total_claims", "?")
+        n_approaches = verdict.get("num_approaches", "?")
+        verdict_text = (
+            f"**{'FEASIBLE' if feasible else 'NOT FEASIBLE'}** — "
+            f"{open_c}/{total_c} open claims, {n_approaches} approaches identified"
+        )
+
+    # Budget summary
+    budget = _read_json(str(workspace / "cli_budget_state.json"))
+    budget_text = ""
+    if budget:
+        invocations = budget.get("invocation_count", "?")
+        secs = budget.get("total_seconds", 0)
+        budget_text = f"{invocations} agent invocations, {secs / 60:.0f} min wall-clock"
 
     content = f"""---
 layout: research-post
 title: "{title}"
 date: {date}
 author: "PoggioAI Consortium"
-usemathjax: true
 status: "{status}"
-pipeline_run: "{run_id}"{issue_line}
+pipeline_run: "{run_id}"{issue_line}{pdf_line}
 ---
 
 > **Task:** {task[:500]}
 
-{body}
+{verdict_text}
+
+{'[Read the full paper (PDF)](' + pdf_asset + ')' if pdf_asset else '*No PDF available — check workspace for .tex files.*'}
+
+{budget_text}
 """
-    return filename, content
+    return filename, content, pdf_source
 
 
 def main():
@@ -272,12 +285,22 @@ def main():
     research_dir = site_repo / "_research"
     research_dir.mkdir(exist_ok=True)
 
-    filename, content = build_post(workspace, site_repo, issue_number=args.issue_number)
-    post_path = research_dir / filename
+    filename, content, pdf_source = build_post(workspace, site_repo, issue_number=args.issue_number)
 
+    # Write the markdown stub
+    post_path = research_dir / filename
     with open(post_path, "w") as f:
         f.write(content)
     print(f"Published: {post_path}")
+
+    # Copy PDF to assets if available
+    if pdf_source:
+        run_id = workspace.name
+        pdf_dir = site_repo / "assets" / "research" / run_id
+        pdf_dir.mkdir(parents=True, exist_ok=True)
+        dst = pdf_dir / "final_paper.pdf"
+        shutil.copy2(pdf_source, dst)
+        print(f"PDF copied: {dst}")
 
     if args.push:
         subprocess.run(["git", "add", "-A"], cwd=site_repo, check=True)

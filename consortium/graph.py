@@ -267,38 +267,102 @@ def build_quick_verdict_node(workspace_dir: str) -> Any:
               f"Open claims: {len(open_claims)}/{len(claims)}, "
               f"Approaches: {num_approaches}")
 
-        # Assemble final_paper.md (lit review summary + research plan)
-        sections = ["# Quick Pass: Research Assessment\n"]
-        if not feasible:
-            sections.append(f"> **Verdict: NOT FEASIBLE** — {feasibility.get('reason', 'see details below')}\n")
-        else:
-            sections.append(f"> **Verdict: FEASIBLE** — {len(open_claims)} open claims, "
-                            f"{num_approaches} approaches identified\n")
-        if lit_review_text:
-            sections.append("## Literature Review\n")
-            if lit_review_text.lstrip().startswith("\\"):
-                sections.append(_latex_to_markdown(lit_review_text))
-            else:
-                sections.append(lit_review_text)
-            sections.append("")
+        # Assemble final_paper.tex (lit review + novelty + research plan) and compile PDF
+        import subprocess as _sp
+
+        # Build novelty assessment as LaTeX
+        novelty_tex = ""
         if claims:
-            sections.append("## Novelty Assessment\n")
+            items = []
             for c in claims:
                 status = c.get("status", "?")
                 claim_text = c.get("claim_text", c.get("claim_id", "?"))[:200]
-                sections.append(f"- **{status}**: {claim_text}")
-            sections.append("")
-        if plan_text:
-            sections.append("## Research Plan\n")
-            if plan_text.lstrip().startswith("\\"):
-                sections.append(_latex_to_markdown(plan_text))
-            else:
-                sections.append(plan_text)
+                # Escape LaTeX special chars
+                for ch in ("&", "%", "$", "#", "_", "{", "}"):
+                    claim_text = claim_text.replace(ch, "\\" + ch)
+                items.append(f"  \\item[\\textbf{{{status}}}] {claim_text}")
+            novelty_tex = (
+                "\\section{Novelty Assessment}\n"
+                "\\begin{description}\n"
+                + "\n".join(items)
+                + "\n\\end{description}\n"
+            )
 
-        final_path = os.path.join(workspace_dir, "final_paper.md")
-        with open(final_path, "w") as f:
-            f.write("\n".join(sections))
-        print(f"[quick_verdict] Combined document: {final_path}")
+        verdict_line = (
+            f"NOT FEASIBLE --- {feasibility.get('reason', 'see details below')}"
+            if not feasible
+            else f"FEASIBLE --- {len(open_claims)} open claims, {num_approaches} approaches identified"
+        )
+
+        # If lit review and plan are already full LaTeX documents, extract their bodies
+        def _extract_body(tex: str) -> str:
+            import re as _re2
+            m = _re2.search(r"\\begin\{document\}(.*?)(?:\\end\{document\})?$", tex, _re2.DOTALL)
+            if m:
+                body = m.group(1)
+                # Remove \maketitle — we have our own
+                body = body.replace("\\maketitle", "")
+                return body.strip()
+            return tex
+
+        lit_body = _extract_body(lit_review_text) if lit_review_text else ""
+        plan_body = _extract_body(plan_text) if plan_text else ""
+
+        combined_tex = (
+            "\\documentclass[11pt,a4paper]{article}\n"
+            "\\usepackage[utf8]{inputenc}\n"
+            "\\usepackage[T1]{fontenc}\n"
+            "\\usepackage{lmodern}\n"
+            "\\usepackage[margin=1.1in]{geometry}\n"
+            "\\usepackage{amsmath,amssymb,amsthm}\n"
+            "\\usepackage{booktabs}\n"
+            "\\usepackage{enumitem}\n"
+            "\\usepackage{hyperref}\n"
+            "\\usepackage{natbib}\n"
+            "\\usepackage{microtype}\n"
+            "\\usepackage{xcolor}\n"
+            "\\usepackage{graphicx}\n"
+            "\\newtheorem{theorem}{Theorem}\n"
+            "\\newtheorem{lemma}[theorem]{Lemma}\n"
+            "\\newtheorem{proposition}[theorem]{Proposition}\n"
+            "\\newtheorem{definition}{Definition}\n"
+            "\\newtheorem{remark}{Remark}\n"
+            "\\title{Quick Pass: Research Assessment}\n"
+            "\\author{PoggioAI Research Consortium}\n"
+            f"\\date{{\\today}}\n"
+            "\\begin{document}\n"
+            "\\maketitle\n"
+            f"\\begin{{center}}\\textbf{{Verdict: {verdict_line}}}\\end{{center}}\n"
+            "\\bigskip\n"
+        )
+        if lit_body:
+            combined_tex += lit_body + "\n\n"
+        if novelty_tex:
+            combined_tex += novelty_tex + "\n\n"
+        if plan_body:
+            combined_tex += "\\section{Research Plan}\n" + plan_body + "\n\n"
+        combined_tex += "\\end{document}\n"
+
+        # Write .tex
+        tex_path = os.path.join(workspace_dir, "final_paper.tex")
+        with open(tex_path, "w") as f:
+            f.write(combined_tex)
+        print(f"[quick_verdict] LaTeX written: {tex_path}")
+
+        # Compile PDF (best-effort, don't fail the pipeline if LaTeX is missing)
+        try:
+            for _ in range(2):  # two passes for references
+                _sp.run(
+                    ["pdflatex", "-interaction=nonstopmode", "-output-directory", workspace_dir, tex_path],
+                    cwd=workspace_dir, capture_output=True, timeout=60,
+                )
+            pdf_path = os.path.join(workspace_dir, "final_paper.pdf")
+            if os.path.isfile(pdf_path):
+                print(f"[quick_verdict] PDF compiled: {pdf_path}")
+            else:
+                print("[quick_verdict] PDF compilation failed — .tex file still available")
+        except (FileNotFoundError, _sp.TimeoutExpired) as e:
+            print(f"[quick_verdict] PDF compilation skipped: {e}")
 
         return {"finished": True}
 

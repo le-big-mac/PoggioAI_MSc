@@ -252,10 +252,18 @@ def _publish_and_comment(
             research_dir = site_repo / "_research"
             research_dir.mkdir(exist_ok=True)
 
-            filename, content = build_post(Path(workspace), site_repo, issue_number=issue_number)
+            import shutil as _shutil
+            filename, content, pdf_source = build_post(Path(workspace), site_repo, issue_number=issue_number)
             post_path = research_dir / filename
             with open(post_path, "w") as f:
                 f.write(content)
+
+            # Copy PDF to assets if available
+            if pdf_source:
+                run_id = Path(workspace).name
+                pdf_dir = site_repo / "assets" / "research" / run_id
+                pdf_dir.mkdir(parents=True, exist_ok=True)
+                _shutil.copy2(pdf_source, pdf_dir / "final_paper.pdf")
 
             # Git commit and push
             subprocess.run(["git", "add", "-A"], cwd=site_repo, check=True, capture_output=True)
