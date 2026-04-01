@@ -159,182 +159,194 @@ def run_persona_council(
     timeout_seconds: int = 600,
     max_post_vote_retries: int = 1,
     synthesis_prompt_override: Optional[str] = None,
+    council_dir: Optional[str] = None,
 ) -> Tuple[str, Dict[str, str]]:
     """
     Run a 3-persona debate to synthesize a research proposal.
 
-    Parameters
-    ----------
-    task : str
-        The research task / question that the personas evaluate.
-    persona_specs : list[dict], optional
-        Per-persona specs with keys ``persona``, ``model``, and optional
-        provider-specific params (e.g. ``reasoning_effort``).  Defaults to
-        :data:`DEFAULT_PERSONA_MODEL_SPECS`.
-    max_debate_rounds : int
-        Number of debate rounds (default 3).
-    synthesis_model : str
-        Model used for the final synthesis step.
-    budget_manager : BudgetManager or None
-        If provided, token usage is recorded for every LLM call.
-    timeout_seconds : int
-        Per-call timeout for ThreadPoolExecutor futures (default 600).
-    max_post_vote_retries : int
-        Max re-synthesis attempts if post-synthesis vote rejects (default 1).
+    Each persona runs as a single long-lived CLI agent that:
+    1. Writes its evaluation to a shared directory
+    2. Polls for other personas' evaluations (file-based coordination)
+    3. Conducts all debate rounds in the same session
+    4. Writes a final verdict
 
-    Returns
-    -------
-    (proposal_text, verdicts) : tuple[str, dict[str, str]]
-        *proposal_text* is the 1-2 page synthesized proposal.
-        *verdicts* maps persona name -> "ACCEPT" | "REJECT" | "UNKNOWN".
+    This uses 3 + 1 = 4 CLI invocations total (3 personas + 1 synthesis),
+    regardless of debate rounds.
+
+    Returns (proposal_text, verdicts) where verdicts maps persona name to
+    "ACCEPT" | "REJECT" | "UNKNOWN".
     """
+    import subprocess as _sp
+    import tempfile
+
     specs = persona_specs or DEFAULT_PERSONA_MODEL_SPECS
 
+    # Create coordination directory for file-based communication
+    if council_dir:
+        coord_dir = os.path.join(council_dir, "persona_council")
+    else:
+        coord_dir = tempfile.mkdtemp(prefix="persona_council_")
+    os.makedirs(coord_dir, exist_ok=True)
+
+    other_names = {spec["persona"] for spec in specs}
+
     # ------------------------------------------------------------------
-    # Phase 1 — Independent evaluations (parallel)
+    # Phase 1+2: Spawn all personas in parallel (each does eval + debate)
     # ------------------------------------------------------------------
 
-    def _evaluate(idx: int) -> Tuple[int, str]:
-        spec = specs[idx]
+    def _run_persona(spec: Dict[str, Any]) -> Tuple[str, str, str]:
+        """Run one persona through eval + wait + debate + verdict in a single CLI session."""
         persona_name = spec["persona"]
         model_id = spec["model"]
-        extra_params = {k: v for k, v in spec.items() if k not in ("persona", "model")}
-
+        backend = _model_to_backend(model_id)
         system_prompt = PERSONA_SYSTEM_PROMPTS.get(persona_name, "")
-        try:
-            output = cli_completion(
-                task,
-                system_prompt=system_prompt,
-                backend=_model_to_backend(model_id),
-            ) or ""
-        except Exception as e:
-            output = f"[{persona_name} error: {e}]"
-        print(f"[persona_council] Phase 1 — {persona_name} evaluation complete.")
-        return idx, output
 
-    evaluations: List[str] = [""] * len(specs)
-    with ThreadPoolExecutor(max_workers=len(specs)) as pool:
-        futures = {pool.submit(_evaluate, i): i for i in range(len(specs))}
+        peers = [s["persona"] for s in specs if s["persona"] != persona_name]
+        peer_files = " ".join(f"{coord_dir}/{p}.md" for p in peers)
+        wait_script = " && ".join(
+            f'while [ ! -f "{coord_dir}/{p}.md" ]; do sleep 3; done'
+            for p in peers
+        )
+
+        prompt = f"""{system_prompt}
+
+You are participating in a multi-persona research council debate.
+Your persona is: {persona_name}
+
+INSTRUCTIONS — complete ALL steps in order within this single session:
+
+STEP 1: EVALUATE
+Read and evaluate the following research proposal from your persona's lens.
+Write your evaluation (assessment, strengths, gaps, verdict) to:
+  {coord_dir}/{persona_name}.md
+
+STEP 2: WAIT FOR PEERS
+Run this command to wait for the other personas to finish their evaluations:
+  {wait_script}
+Then read their evaluations from: {peer_files}
+
+STEP 3: DEBATE ({max_debate_rounds} rounds)
+For each round, read what the other personas wrote, then write your critique.
+Append each round to your file {coord_dir}/{persona_name}.md under a
+"## Debate Round N" heading. Focus on the single strongest reason the
+proposal should be REJECTED from your lens. Be a harsh critic. Only concede
+if evidence from another persona is overwhelming.
+
+After debate, update your file with a final section:
+## Final Verdict
+VERDICT: ACCEPT or REJECT
+One-sentence justification.
+
+STEP 4: DONE
+When all steps are complete, output "PERSONA COMPLETE" as your last line.
+
+THE PROPOSAL TO EVALUATE:
+{task}
+"""
+        if backend == "claude":
+            cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "40"]
+            if model_id:
+                cmd.extend(["--model", model_id])
+            cmd.extend(["--allowedTools",
+                         "Read,Write,Edit,WebFetch,WebSearch,Bash(sleep*),Bash(cat*),Bash(ls*),Bash(while*),Bash(test*),Bash([*),Glob,Grep"])
+        elif backend == "codex":
+            cmd = ["codex", "exec", "--full-auto"]
+            if model_id:
+                cmd.extend(["-m", model_id])
+        elif backend == "gemini":
+            cmd = ["gemini"]
+            if model_id:
+                cmd.extend(["--model", model_id])
+        else:
+            return persona_name, f"[unknown backend: {backend}]", "UNKNOWN"
+
+        print(f"[persona_council] Spawning {persona_name} ({backend}/{model_id})...")
         try:
-            for future in as_completed(futures, timeout=timeout_seconds + 60):
+            result = _sp.run(
+                cmd, input=prompt, capture_output=True, text=True,
+                cwd=coord_dir, timeout=timeout_seconds,
+                env=os.environ.copy(),
+            )
+            stdout = result.stdout.strip()
+        except _sp.TimeoutExpired:
+            stdout = f"[{persona_name} timed out after {timeout_seconds}s]"
+            print(f"[persona_council] {persona_name} TIMED OUT.")
+        except FileNotFoundError:
+            stdout = f"[{persona_name} error: {backend} CLI not found]"
+            print(f"[persona_council] {persona_name} error: {backend} not found.")
+
+        # Read the persona's output file
+        eval_path = os.path.join(coord_dir, f"{persona_name}.md")
+        if os.path.isfile(eval_path):
+            with open(eval_path) as f:
+                eval_text = f.read()
+        else:
+            eval_text = stdout  # fallback to stdout if no file written
+
+        verdict = _extract_verdict(eval_text)
+        print(f"[persona_council] {persona_name} complete — verdict: {verdict}")
+
+        # Budget tracking
+        try:
+            from .cli_budget import get_global_cli_tracker
+            tracker = get_global_cli_tracker()
+            if tracker:
+                tracker.record_invocation(
+                    agent_name=f"persona_{persona_name}",
+                    backend=backend,
+                    model=model_id or "default",
+                    duration_seconds=0,
+                    prompt_chars=len(prompt),
+                    output_chars=len(eval_text),
+                )
+        except Exception:
+            pass
+
+        return persona_name, eval_text, verdict
+
+    # Run all personas in parallel
+    evaluations: Dict[str, str] = {}
+    verdicts: Dict[str, str] = {}
+
+    with ThreadPoolExecutor(max_workers=len(specs)) as pool:
+        futures = {pool.submit(_run_persona, spec): spec["persona"] for spec in specs}
+        try:
+            for future in as_completed(futures, timeout=timeout_seconds + 120):
                 try:
-                    idx, output = future.result(timeout=timeout_seconds)
-                    evaluations[idx] = output
-                except TimeoutError:
-                    for f, i in futures.items():
-                        if f is future:
-                            name = specs[i]["persona"]
-                            evaluations[i] = f"[{name} error: timed out after {timeout_seconds}s]"
-                            print(f"[persona_council] Phase 1 — {name} TIMED OUT.")
-                            break
+                    name, eval_text, verdict = future.result(timeout=timeout_seconds + 60)
+                    evaluations[name] = eval_text
+                    verdicts[name] = verdict
                 except Exception as e:
-                    for f, i in futures.items():
+                    for f, pname in futures.items():
                         if f is future:
-                            name = specs[i]["persona"]
-                            evaluations[i] = f"[{name} error: {e}]"
-                            print(f"[persona_council] Phase 1 — {name} error: {e}")
+                            evaluations[pname] = f"[{pname} error: {e}]"
+                            verdicts[pname] = "UNKNOWN"
                             break
         except TimeoutError:
-            print(f"[persona_council] Phase 1 evaluation timeout — some personas did not complete within {timeout_seconds + 60}s")
-            for f, i in futures.items():
+            for f, pname in futures.items():
                 if not f.done():
-                    name = specs[i]["persona"]
-                    evaluations[i] = f"[{name} error: timed out after {timeout_seconds}s]"
+                    evaluations[pname] = f"[{pname} timed out]"
+                    verdicts[pname] = "UNKNOWN"
                     f.cancel()
 
-    # Format evaluations for debate context
-    formatted_evals = "\n\n".join(
-        f"=== Evaluation by {specs[i]['persona']} ===\n{text}"
-        for i, text in enumerate(evaluations)
-    )
-
     # ------------------------------------------------------------------
-    # Phase 2 — Debate rounds (parallel per round)
+    # Phase 3 — Synthesis (1 CLI call)
     # ------------------------------------------------------------------
-    debate_history: List[str] = []
-
-    for rnd in range(max_debate_rounds):
-        debate_prompt = (
-            f"Original task:\n{task}\n\n"
-            f"Initial evaluations from all personas:\n\n{formatted_evals}\n\n"
-        )
-        if debate_history:
-            debate_prompt += "Prior debate rounds:\n" + "\n---\n".join(debate_history) + "\n\n"
-        debate_prompt += (
-            "Your job in this round is to argue that this proposal should be REJECTED from your lens. "
-            "Find the single strongest reason it should not proceed as written. "
-            "Be a harsh critic, not a helpful colleague. "
-            "Only concede a point if the evidence from another persona's evaluation is overwhelming. "
-            "State clearly whether you maintain or change your verdict (ACCEPT/REJECT) and why."
-        )
-
-        def _one_critique(i: int) -> Tuple[int, str]:
-            spec = specs[i]
-            persona_name = spec["persona"]
-            model_id = spec["model"]
-            extra_params = {k: v for k, v in spec.items() if k not in ("persona", "model")}
-            system_prompt = PERSONA_SYSTEM_PROMPTS.get(persona_name, "")
-            try:
-                critique = cli_completion(
-                    debate_prompt,
-                    system_prompt=system_prompt,
-                    backend=_model_to_backend(model_id),
-                ) or ""
-            except Exception as e:
-                critique = f"[{persona_name} error: {e}]"
-            return i, f"{persona_name}:\n{critique}"
-
-        critiques: List[str] = [""] * len(specs)
-        with ThreadPoolExecutor(max_workers=len(specs)) as pool:
-            futures = {pool.submit(_one_critique, i): i for i in range(len(specs))}
-            try:
-                for future in as_completed(futures, timeout=timeout_seconds + 60):
-                    try:
-                        i, text = future.result(timeout=timeout_seconds)
-                        critiques[i] = text
-                    except TimeoutError:
-                        for f, idx in futures.items():
-                            if f is future:
-                                name = specs[idx]["persona"]
-                                critiques[idx] = f"{name}:\n[debate timed out after {timeout_seconds}s]"
-                                print(f"[persona_council] Debate round {rnd + 1} — {name} TIMED OUT.")
-                                break
-                    except Exception as e:
-                        for f, idx in futures.items():
-                            if f is future:
-                                name = specs[idx]["persona"]
-                                critiques[idx] = f"{name}:\n[debate error: {e}]"
-                                break
-            except TimeoutError:
-                print(f"[persona_council] Debate round {rnd + 1} timeout — some personas did not complete within {timeout_seconds + 60}s")
-                for f, idx in futures.items():
-                    if not f.done():
-                        name = specs[idx]["persona"]
-                        critiques[idx] = f"{name}:\n[debate timed out after {timeout_seconds}s]"
-                        f.cancel()
-
-        debate_history.append(f"[Round {rnd + 1}]\n" + "\n\n".join(critiques))
-        print(f"[persona_council] Phase 2 — debate round {rnd + 1}/{max_debate_rounds} complete.")
-
-    # ------------------------------------------------------------------
-    # Phase 3 — Synthesis
-    # ------------------------------------------------------------------
-
-    # Extract verdicts before synthesis so we can pass them explicitly
-    verdicts: Dict[str, str] = {}
-    for i, spec in enumerate(specs):
-        verdicts[spec["persona"]] = _extract_verdict(evaluations[i])
 
     verdict_summary = ", ".join(f"{k}={v}" for k, v in verdicts.items())
     accept_count = sum(1 for v in verdicts.values() if v == "ACCEPT")
     reject_count = sum(1 for v in verdicts.values() if v == "REJECT")
 
+    formatted_evals = "\n\n".join(
+        f"=== {name} (verdict: {verdicts.get(name, 'UNKNOWN')}) ===\n{text}"
+        for name, text in evaluations.items()
+    )
+
     synthesis_input = (
         f"VERDICT SUMMARY: {verdict_summary} "
         f"({accept_count} ACCEPT, {reject_count} REJECT)\n\n"
         f"Original task:\n{task}\n\n"
-        f"Persona evaluations:\n\n{formatted_evals}\n\n"
-        f"Debate ({len(debate_history)} rounds):\n" + "\n---\n".join(debate_history)
+        f"Persona evaluations and debate:\n\n{formatted_evals}"
     )
 
     try:
@@ -345,106 +357,15 @@ def run_persona_council(
         ) or ""
     except Exception as e:
         print(f"[persona_council] Synthesis failed ({e}), using first evaluation as fallback.")
-        proposal_text = evaluations[0] if evaluations else f"[synthesis error: {e}]"
+        first_eval = next(iter(evaluations.values()), f"[synthesis error: {e}]")
+        proposal_text = first_eval
 
-    # ------------------------------------------------------------------
-    # Phase 4 — Post-synthesis accountability vote (parallel)
-    # ------------------------------------------------------------------
-
-    def _post_vote(idx: int, proposal: str) -> Tuple[int, str, str]:
-        """Ask one persona to vote ACCEPT/REJECT on the synthesized proposal."""
-        spec = specs[idx]
-        persona_name = spec["persona"]
-        model_id = spec["model"]
-        extra_params = {k: v for k, v in spec.items() if k not in ("persona", "model")}
-
-        system_prompt = PERSONA_SYSTEM_PROMPTS.get(persona_name, "")
-        user_content = (
-            f"{PERSONA_POST_SYNTHESIS_VOTE_PROMPT}\n\n"
-            f"YOUR PERSONA: {persona_name}\n\n"
-            f"YOUR INITIAL EVALUATION:\n{evaluations[idx]}\n\n"
-            f"SYNTHESIZED PROPOSAL:\n{proposal}"
-        )
-        try:
-            vote_text = cli_completion(
-                user_content,
-                system_prompt=system_prompt,
-                backend=_model_to_backend(model_id),
-            ) or ""
-        except Exception as e:
-            vote_text = f"[{persona_name} vote error: {e}]"
-        vote_verdict = _extract_verdict(vote_text)
-        return idx, vote_verdict, vote_text
-
-    for post_vote_attempt in range(max_post_vote_retries + 1):
-        post_verdicts: Dict[str, str] = {}
-        post_vote_texts: Dict[str, str] = {}
-
-        with ThreadPoolExecutor(max_workers=len(specs)) as pool:
-            futures = {pool.submit(_post_vote, i, proposal_text): i for i in range(len(specs))}
-            try:
-                for future in as_completed(futures, timeout=timeout_seconds + 60):
-                    try:
-                        idx, vote_verdict, vote_text = future.result(timeout=timeout_seconds)
-                        name = specs[idx]["persona"]
-                        post_verdicts[name] = vote_verdict
-                        post_vote_texts[name] = vote_text
-                    except (TimeoutError, Exception) as e:
-                        for f, i in futures.items():
-                            if f is future:
-                                name = specs[i]["persona"]
-                                post_verdicts[name] = "UNKNOWN"
-                                post_vote_texts[name] = f"[vote error: {e}]"
-                                break
-            except TimeoutError:
-                for f, i in futures.items():
-                    if not f.done():
-                        name = specs[i]["persona"]
-                        post_verdicts[name] = "UNKNOWN"
-                        post_vote_texts[name] = "[vote timed out]"
-                        f.cancel()
-
-        post_reject_count = sum(1 for v in post_verdicts.values() if v == "REJECT")
-        print(
-            f"[persona_council] Phase 4 — post-synthesis vote "
-            f"(attempt {post_vote_attempt + 1}): {post_verdicts}"
-        )
-
-        if post_reject_count < 2 or post_vote_attempt >= max_post_vote_retries:
-            # Accept or retries exhausted — use current proposal
-            verdicts = post_verdicts
-            break
-
-        # 2+ rejected — re-synthesize with objections appended
-        objections = "\n\n".join(
-            f"=== {name} POST-SYNTHESIS REJECTION ===\n{post_vote_texts[name]}"
-            for name, v in post_verdicts.items() if v == "REJECT"
-        )
-        synthesis_input_retry = (
-            synthesis_input + "\n\n"
-            f"POST-SYNTHESIS VOTE: {post_reject_count} of {len(specs)} personas REJECTED "
-            f"the synthesized proposal. Their objections:\n\n{objections}\n\n"
-            "You MUST address these objections in a revised proposal."
-        )
-        try:
-            proposal_text = cli_completion(
-                synthesis_input_retry,
-                system_prompt=PERSONA_SYNTHESIS_PROMPT,
-                backend=_model_to_backend(synthesis_model),
-            ) or ""
-            print("[persona_council] Phase 4 — re-synthesis complete after post-vote rejection.")
-        except Exception as e:
-            print(f"[persona_council] Re-synthesis failed ({e}), keeping original proposal.")
-            verdicts = post_verdicts
-            break
-
-    # Warn about UNKNOWN verdicts (parse failures or errors)
+    # Warn about UNKNOWN verdicts
     unknown_personas = [name for name, v in verdicts.items() if v == "UNKNOWN"]
     if unknown_personas:
         print(
-            f"[persona_council] WARNING: Phase 4 — {len(unknown_personas)} persona(s) "
-            f"returned UNKNOWN verdict (parse failure or error): {unknown_personas}. "
-            f"These were not counted toward re-synthesis threshold."
+            f"[persona_council] WARNING: {len(unknown_personas)} persona(s) "
+            f"returned UNKNOWN verdict: {unknown_personas}"
         )
 
     print(f"[persona_council] Complete. Final verdicts: {verdicts}")
@@ -635,6 +556,7 @@ def create_persona_council_node(
             timeout_seconds=timeout_seconds,
             max_post_vote_retries=max_post_vote_retries,
             synthesis_prompt_override=synthesis_prompt_override,
+            council_dir=workspace_dir,
         )
 
         # Write artifacts to paper_workspace
