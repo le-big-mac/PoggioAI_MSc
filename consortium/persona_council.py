@@ -202,11 +202,34 @@ def run_persona_council(
         system_prompt = PERSONA_SYSTEM_PROMPTS.get(persona_name, "")
 
         peers = [s["persona"] for s in specs if s["persona"] != persona_name]
-        peer_files = " ".join(f"{coord_dir}/{p}.md" for p in peers)
-        wait_script = " && ".join(
+
+        # Build wait commands for initial eval barrier
+        wait_for_evals = " && ".join(
             f'while [ ! -f "{coord_dir}/{p}.md" ]; do sleep 3; done'
             for p in peers
         )
+
+        # Build per-round barrier wait commands
+        round_instructions = []
+        for rnd in range(1, max_debate_rounds + 1):
+            wait_for_round = " && ".join(
+                f'while [ ! -f "{coord_dir}/{p}_round{rnd}.done" ]; do sleep 3; done'
+                for p in peers
+            )
+            peer_files_for_round = " ".join(f"{coord_dir}/{p}.md" for p in peers)
+            round_instructions.append(f"""
+DEBATE ROUND {rnd}:
+a) Wait for all peers to be ready for round {rnd}:
+     {wait_for_round}
+b) Read the latest content from each peer's file: {peer_files_for_round}
+c) Write your round {rnd} critique — append it to {coord_dir}/{persona_name}.md
+   under a "## Debate Round {rnd}" heading. Focus on the single strongest reason
+   the proposal should be REJECTED from your lens. Be a harsh critic. Only concede
+   if evidence from another persona is overwhelming.
+d) Signal that you have completed round {rnd}:
+     touch {coord_dir}/{persona_name}_round{rnd}.done""")
+
+        debate_steps = "\n".join(round_instructions)
 
         prompt = f"""{system_prompt}
 
@@ -217,28 +240,27 @@ INSTRUCTIONS — complete ALL steps in order within this single session:
 
 STEP 1: EVALUATE
 Read and evaluate the following research proposal from your persona's lens.
-Write your evaluation (assessment, strengths, gaps, verdict) to:
+Write your evaluation (assessment, strengths, gaps, initial verdict) to:
   {coord_dir}/{persona_name}.md
 
-STEP 2: WAIT FOR PEERS
+STEP 2: WAIT FOR PEER EVALUATIONS
 Run this command to wait for the other personas to finish their evaluations:
-  {wait_script}
-Then read their evaluations from: {peer_files}
+  {wait_for_evals}
+Then read their evaluations from: {" ".join(f"{coord_dir}/{p}.md" for p in peers)}
 
-STEP 3: DEBATE ({max_debate_rounds} rounds)
-For each round, read what the other personas wrote, then write your critique.
-Append each round to your file {coord_dir}/{persona_name}.md under a
-"## Debate Round N" heading. Focus on the single strongest reason the
-proposal should be REJECTED from your lens. Be a harsh critic. Only concede
-if evidence from another persona is overwhelming.
+STEP 3: DEBATE ({max_debate_rounds} synchronized rounds)
+Each round has a barrier — you must wait for peers to finish the previous round
+before starting the next one. Follow these steps EXACTLY:
+{debate_steps}
 
-After debate, update your file with a final section:
+STEP 4: FINAL VERDICT
+After all debate rounds, append a final section to {coord_dir}/{persona_name}.md:
 ## Final Verdict
 VERDICT: ACCEPT or REJECT
 One-sentence justification.
 
-STEP 4: DONE
-When all steps are complete, output "PERSONA COMPLETE" as your last line.
+STEP 5: DONE
+Output "PERSONA COMPLETE" as your last line.
 
 THE PROPOSAL TO EVALUATE:
 {task}
@@ -248,7 +270,7 @@ THE PROPOSAL TO EVALUATE:
             if model_id:
                 cmd.extend(["--model", model_id])
             cmd.extend(["--allowedTools",
-                         "Read,Write,Edit,WebFetch,WebSearch,Bash(sleep*),Bash(cat*),Bash(ls*),Bash(while*),Bash(test*),Bash([*),Glob,Grep"])
+                         "Read,Write,Edit,WebFetch,WebSearch,Bash(sleep*),Bash(cat*),Bash(ls*),Bash(touch*),Bash(while*),Bash(test*),Bash([*),Glob,Grep"])
         elif backend == "codex":
             cmd = ["codex", "exec", "--full-auto"]
             if model_id:
