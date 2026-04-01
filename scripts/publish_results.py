@@ -258,7 +258,7 @@ status: "{status}"
 pipeline_run: "{run_id}"{issue_line}{pdf_line}
 ---
 
-> **Task:** {task[:500]}
+**Task:** {task[:500]}
 
 {verdict_text}
 
