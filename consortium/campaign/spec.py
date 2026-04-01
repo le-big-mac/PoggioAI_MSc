@@ -70,6 +70,8 @@ class NotificationConfig:
     twilio_auth_token: Optional[str] = None
     twilio_from_number: Optional[str] = None
     sms_to_number: Optional[str] = None
+    whatsapp_from: Optional[str] = None  # e.g. "whatsapp:+14155238886" (Twilio sandbox)
+    whatsapp_to: Optional[str] = None    # e.g. "whatsapp:+447123456789"
     on_stage_complete: bool = True
     on_failure: bool = True
     on_heartbeat: bool = False
@@ -86,6 +88,8 @@ class NotificationConfig:
             twilio_auth_token=_expand_env(d.get("twilio_auth_token")),
             twilio_from_number=_expand_env(d.get("twilio_from_number")),
             sms_to_number=_expand_env(d.get("sms_to_number")),
+            whatsapp_from=_expand_env(d.get("whatsapp_from")),
+            whatsapp_to=_expand_env(d.get("whatsapp_to")),
             on_stage_complete=d.get("on_stage_complete", True),
             on_failure=d.get("on_failure", True),
             on_heartbeat=d.get("on_heartbeat", False),

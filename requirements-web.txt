@@ -2,3 +2,4 @@ crawl4ai
 playwright
 serpapi
 pathvalidate
+flask

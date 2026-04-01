@@ -18,6 +18,24 @@ services:
     #   docker compose run consortium --task "Your research task" --no-counsel
     command: ["--help"]
 
+  # Idea receiver: webhook server (port 5003) + idea watcher polling loop
+  # Receives ideas via WhatsApp/web form, launches pipeline runs automatically
+  idea-receiver:
+    build:
+      context: .
+      target: idea-receiver
+    image: consortium:idea-receiver
+    env_file:
+      - .env
+    ports:
+      - "5003:5003"
+    volumes:
+      - ./results:/app/results
+      - ./logs:/app/logs
+      - ./ideas.json:/app/ideas.json
+      - ./.llm_config.yaml:/app/.llm_config.yaml:ro
+    restart: unless-stopped
+
   # Minimal image: no web crawl, no Playwright — for quick/cheap runs
   consortium-minimal:
     build:

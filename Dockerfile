@@ -67,7 +67,16 @@ RUN pip install --no-cache-dir -e ".[docs,web,observability]"
 RUN python -m playwright install chromium --with-deps 2>/dev/null || true
 
 ENV CONSORTIUM_LOG_TO_FILES=0
+EXPOSE 5003
 ENTRYPOINT ["python", "launch_multiagent.py"]
+
+# ── Stage 4: idea-receiver (webhook + watcher) ──────────────────────────────
+FROM full AS idea-receiver
+
+# Override entrypoint: run webhook server + idea watcher side by side
+COPY scripts/idea_watcher.py scripts/idea_watcher.py
+EXPOSE 5003
+CMD ["sh", "-c", "python -m consortium.interaction.webhook_server --port 5003 & python scripts/idea_watcher.py --interval 30"]
 
 # Default target is full
 FROM full
