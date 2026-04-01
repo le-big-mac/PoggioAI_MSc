@@ -507,16 +507,17 @@ def main():
     if enforce_paper_artifacts:
         print("Paper artifact gate: " + ", ".join(required_paper_artifacts))
 
-    # --- LaTeX prereq check ---
+    # --- LaTeX prereq check (tectonic) ---
     require_latex = enforce_paper_artifacts or args.require_pdf or enforce_editorial_artifacts
     if require_latex:
-        pdflatex_path, bibtex_path, latex_error = check_latex_prereqs()
-        if latex_error:
-            print(f"Missing LaTeX prerequisites.\n{latex_error}")
+        import shutil as _shutil
+        tectonic_path = _shutil.which("tectonic")
+        if not tectonic_path:
+            print("Missing LaTeX prerequisite: 'tectonic' not found on PATH.\n"
+                  "Install: curl -LsSf https://drop-sh.fullyjustified.net | sh")
             return 1
-        os.environ["CONSORTIUM_PDFLATEX_PATH"] = pdflatex_path
-        os.environ["CONSORTIUM_BIBTEX_PATH"] = bibtex_path
-        print(f"LaTeX toolchain: pdflatex={pdflatex_path}, bibtex={bibtex_path}")
+        os.environ["CONSORTIUM_TECTONIC_PATH"] = tectonic_path
+        print(f"LaTeX toolchain: tectonic={tectonic_path}")
 
     essential_imports = _filter_installed_imports([
         "json", "os", "posixpath", "ntpath", "sys", "datetime", "uuid", "typing",

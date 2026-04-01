@@ -19,19 +19,18 @@
 FROM python:3.11-slim AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # LaTeX toolchain
-    texlive-latex-base \
-    texlive-latex-extra \
-    texlive-bibtex-extra \
-    bibtex2html \
-    latexmk \
     # Git (for git-commit metadata + publish script)
     git \
     # Build tools for some Python packages
     build-essential \
-    # curl for Node.js install
+    # curl for Node.js install + tectonic download
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install tectonic (single-binary LaTeX compiler, handles bibtex automatically)
+RUN curl -L "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-gnu.tar.gz" \
+    | tar xz -C /usr/local/bin/ tectonic \
+    && chmod +x /usr/local/bin/tectonic
 
 # Install Node.js 22 (for claude, codex, gemini CLIs)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \

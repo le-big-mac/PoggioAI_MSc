@@ -218,7 +218,7 @@ _CLI_TOOL_COMMANDS = {
     "claim_graph": "python -m consortium.toolkits.math.claim_graph_cli --workspace . --action '<action>' [--claim-id '<id>'] [--statement '<text>']",
     "proof_rigor_check": "python -m consortium.toolkits.math.proof_rigor_cli --workspace . [--claim-id '<id>'] [--check-level strict]",
     "citation_search": "python -m consortium.toolkits.writeup.citation_search_cli --query '<query>' --limit 10 --source both",
-    "latex_compile": "pdflatex -interaction=nonstopmode <file.tex> && bibtex <file> && pdflatex -interaction=nonstopmode <file.tex>",
+    "latex_compile": "tectonic <file.tex>  # single command, handles bibtex/references automatically",
 }
 
 

@@ -118,20 +118,17 @@ if has_capability experiment; then
 fi
 
 if has_capability latex; then
-  # Install TeX toolchain in conda env to support pdflatex/bibtex compilation.
-  # Use --prefix or -n depending on env type.
-  if [[ -n "$USE_PREFIX" ]]; then
-    conda install --prefix "$USE_PREFIX" -c conda-forge texlive-core latexmk -y
+  # Install tectonic (single-binary LaTeX compiler, no texlive needed)
+  if ! command -v tectonic >/dev/null 2>&1; then
+    echo "Installing tectonic LaTeX compiler..."
+    mkdir -p "$HOME/.local/bin"
+    curl -L "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-gnu.tar.gz" \
+      | tar xz -C "$HOME/.local/bin/" tectonic
+    chmod +x "$HOME/.local/bin/tectonic"
+    export PATH="$HOME/.local/bin:$PATH"
+    echo "tectonic installed: $(tectonic --version)"
   else
-    conda install -n "$ENV_NAME" -c conda-forge texlive-core latexmk -y
-  fi
-  # On Engaging, also try loading system tex-live module as fallback
-  if command -v module >/dev/null 2>&1; then
-    module load tex-live/20251104 2>/dev/null || true
-  fi
-  # Best-effort format generation to avoid "can't find pdflatex.fmt".
-  if command -v fmtutil-user >/dev/null 2>&1; then
-    fmtutil-user --byfmt pdflatex >/dev/null 2>&1 || true
+    echo "tectonic already installed: $(tectonic --version)"
   fi
 fi
 

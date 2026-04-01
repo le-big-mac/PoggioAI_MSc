@@ -305,10 +305,10 @@ pursuing this research direction.
 Write the output as a complete LaTeX document to: {workspace_dir}/final_paper.tex
 
 Then compile it to PDF by running:
-pdflatex -interaction=nonstopmode -output-directory {workspace_dir} {workspace_dir}/final_paper.tex
+tectonic {workspace_dir}/final_paper.tex
 
-Run pdflatex twice (for cross-references). If compilation fails, fix the LaTeX errors
-and try again.
+Tectonic handles bibtex and multiple passes automatically. If compilation fails, fix
+the LaTeX errors and try again.
 """
         # Determine CLI backend
         backend = "claude"
@@ -322,7 +322,7 @@ and try again.
         if model:
             cmd.extend(["--model", model])
         cmd.extend(["--allowedTools",
-                     "Read,Write,Edit,Bash(pdflatex*),Bash(bibtex*),Bash(cat*),Bash(ls*),Grep,Glob"])
+                     "Read,Write,Edit,Bash(tectonic*),Bash(cat*),Bash(ls*),Grep,Glob"])
 
         if backend == "codex":
             cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
