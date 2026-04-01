@@ -3,7 +3,8 @@ Model counsel — multi-model debate and synthesis for each pipeline stage.
 
 CLI-agent-only version: sandbox agents run as CLI tool subprocesses (Claude
 Code, Codex, Gemini CLI) instead of LangChain ReAct agents. Debate and
-synthesis use cli_completion() instead of litellm.completion().
+synthesis use full CLI agent subprocess calls with tool access, so debate
+critics can examine workspace files, search for information, and verify claims.
 
 For each stage, spawns one CLI agent per counsel backend, each working in
 its own sandbox copy of the workspace. Their outputs feed a text-based
@@ -25,7 +26,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, List, Optional
 
-from .cli_completion import cli_completion
+import logging
+
+from .cli_completion import cli_completion  # kept for potential fallback use
+
+logger = logging.getLogger(__name__)
 
 
 def _model_to_backend(model_id: str) -> str:
@@ -153,6 +158,104 @@ def _run_sandbox_cli_agent(
 
 
 # ---------------------------------------------------------------------------
+# CLI agent completion with tool access (for debate & synthesis)
+# ---------------------------------------------------------------------------
+
+def _cli_agent_completion(
+    prompt: str,
+    backend: str,
+    model: Optional[str],
+    workspace_dir: str,
+    timeout: int = 600,
+) -> str:
+    """Run a CLI agent with full tool access for debate/synthesis phases.
+
+    Unlike ``cli_completion()`` which runs with no tools (single prompt-in,
+    text-out), this function gives the agent access to Read, Bash, Grep, Glob,
+    etc. so it can examine workspace files, verify claims, and search for
+    information during debate critiques and synthesis.
+
+    Args:
+        prompt: The debate/synthesis prompt.
+        backend: CLI backend — "claude", "codex", or "gemini".
+        model: Optional model override.
+        workspace_dir: Working directory for the agent (gives file access).
+        timeout: Max seconds for the subprocess.
+
+    Returns:
+        Response text. On error/timeout returns a descriptive error string.
+    """
+    t0 = time.time()
+
+    if backend == "claude":
+        cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "20"]
+        if model:
+            cmd.extend(["--model", model])
+        cmd.extend([
+            "--allowedTools",
+            "Read,Bash(cat*),Bash(ls*),Bash(grep*),Bash(find*),Bash(python*),Glob,Grep",
+        ])
+    elif backend == "codex":
+        cmd = ["codex", "--approval-mode", "full-auto", "--quiet"]
+        if model:
+            cmd.extend(["--model", model])
+    elif backend == "gemini":
+        cmd = ["gemini"]
+        if model:
+            cmd.extend(["--model", model])
+    else:
+        return f"[_cli_agent_completion error: unknown backend {backend!r}]"
+
+    try:
+        result = subprocess.run(
+            cmd, input=prompt, capture_output=True, text=True,
+            cwd=workspace_dir, timeout=timeout,
+            env=os.environ.copy(),
+        )
+    except subprocess.TimeoutExpired:
+        elapsed = time.time() - t0
+        msg = f"[_cli_agent_completion timed out after {elapsed:.0f}s — backend={backend}, model={model}]"
+        logger.warning(msg)
+        return msg
+    except FileNotFoundError:
+        msg = f"[_cli_agent_completion error: '{backend}' CLI tool not found on PATH]"
+        logger.error(msg)
+        return msg
+
+    elapsed = time.time() - t0
+
+    if result.returncode != 0:
+        stderr_snippet = (result.stderr or "")[:500]
+        msg = f"[_cli_agent_completion error (rc={result.returncode}): {stderr_snippet}]"
+        logger.warning(msg)
+        return msg
+
+    output = result.stdout.strip()
+
+    # Record invocation for budget tracking
+    try:
+        from .cli_budget import get_global_cli_tracker
+        tracker = get_global_cli_tracker()
+        if tracker is not None:
+            tracker.record_invocation(
+                agent_name="counsel_debate",
+                backend=backend,
+                model=model or "default",
+                duration_seconds=elapsed,
+                prompt_chars=len(prompt),
+                output_chars=len(output),
+            )
+    except Exception:
+        pass  # Never break callers for tracking errors
+
+    logger.debug(
+        "[_cli_agent_completion] backend=%s model=%s elapsed=%.1fs output_len=%d",
+        backend, model, elapsed, len(output),
+    )
+    return output
+
+
+# ---------------------------------------------------------------------------
 # Core counsel stage runner
 # ---------------------------------------------------------------------------
 
@@ -170,9 +273,11 @@ def run_counsel_stage(
 
     1. Sandbox phase  — each CLI agent runs independently in its own workspace copy
                         (all N agents run in parallel via ThreadPoolExecutor).
-    2. Debate phase   — models critique each other's solutions via cli_completion();
+    2. Debate phase   — models critique each other's solutions via full CLI agent
+                        calls with tool access (Read, Bash, Grep, Glob);
                         all N critiques per round run in parallel.
-    3. Synthesis      — cli_completion() produces the final consensus output.
+    3. Synthesis      — full CLI agent call with tool access produces the final
+                        consensus output.
     4. Promotion      — sandbox artifacts are merged back to the main workspace.
 
     Returns the consensus output string.
@@ -298,7 +403,13 @@ def run_counsel_stage(
             backend = spec.get("backend") or _model_to_backend(spec.get("model", ""))
             model = spec.get("model")
             try:
-                critique = cli_completion(base_prompt, backend=backend, model=model)
+                critique = _cli_agent_completion(
+                    base_prompt,
+                    backend=backend,
+                    model=model,
+                    workspace_dir=workspace_dir,
+                    timeout=model_timeout_seconds,
+                )
             except Exception as e:
                 critique = f"[{model} debate error: {e}]"
             return i, f"Model {i} ({model}):\n{critique}"
@@ -366,10 +477,12 @@ def run_counsel_stage(
     )
 
     try:
-        final_output = cli_completion(
+        final_output = _cli_agent_completion(
             synthesis_prompt,
             backend=SYNTHESIS_BACKEND,
             model=SYNTHESIS_MODEL,
+            workspace_dir=workspace_dir,
+            timeout=model_timeout_seconds,
         )
         if not final_output:
             final_output = sandbox_outputs[0] if sandbox_outputs else ""
