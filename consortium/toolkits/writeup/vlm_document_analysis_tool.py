@@ -23,7 +23,31 @@ from typing import List, Dict, Any, Optional, Tuple, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, ConfigDict
 
-from ...llm import get_response_from_vlm, create_vlm_client
+import subprocess as _sp
+
+
+def _vlm_via_cli(prompt: str, image_paths: list[str], model: str | None = None) -> str:
+    """Analyse images via Claude Code CLI (replaces direct API VLM calls).
+
+    Claude Code can read image files natively via its Read tool.
+    """
+    image_refs = "\n".join(f"- {p}" for p in image_paths if os.path.isfile(p))
+    full_prompt = (
+        f"Read and analyse the following image file(s):\n{image_refs}\n\n{prompt}\n\n"
+        "Provide your analysis as plain text."
+    )
+    cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "5"]
+    if model:
+        cmd.extend(["--model", model])
+    cmd.extend(["--allowedTools", "Read"])
+
+    try:
+        result = _sp.run(
+            cmd, input=full_prompt, capture_output=True, text=True, timeout=120,
+        )
+        return result.stdout.strip() or result.stderr.strip() or "(no output)"
+    except (_sp.TimeoutExpired, FileNotFoundError) as e:
+        return f"VLM analysis unavailable: {e}"
 
 # Try to import PyMuPDF for PDF processing
 try:
@@ -152,23 +176,8 @@ class VLMDocumentAnalysisTool(BaseTool):
                     "provided_files": valid_paths,
                 })
 
-            client, model = create_vlm_client(self.vlm_model)
             analysis_prompt = self._get_analysis_prompt(analysis_focus, len(image_files))
-
-            system_message = (
-                "You are an expert scientific figure analyst specializing in machine learning and AI research papers. "
-                "You provide detailed, accurate, and insightful analysis of experimental visualizations. "
-                "Focus on extracting meaningful scientific insights and assessing publication quality."
-            )
-
-            response, _ = get_response_from_vlm(
-                prompt=analysis_prompt,
-                images=image_files,
-                client=client,
-                model=model,
-                system_message=system_message,
-                print_debug=False,
-            )
+            response = _vlm_via_cli(analysis_prompt, image_files, self.vlm_model)
 
             structured_analysis = self._structure_analysis(response, valid_paths, analysis_focus)
             return json.dumps(structured_analysis, indent=2)
@@ -630,7 +639,6 @@ class VLMDocumentAnalysisTool(BaseTool):
             }
 
         try:
-            client, model = create_vlm_client(self.vlm_model)
             questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)])
 
             prompt = (
@@ -640,20 +648,7 @@ class VLMDocumentAnalysisTool(BaseTool):
                 "If any issues are detected (missing data, poor quality, broken elements), describe them clearly."
             )
 
-            system_message = (
-                "You are an expert scientific figure analyst. Provide precise, detailed answers to specific "
-                "questions about research figures. Focus on extracting concrete data and identifying any "
-                "quality or content issues."
-            )
-
-            response, _ = get_response_from_vlm(
-                prompt=prompt,
-                images=[image_path],
-                client=client,
-                model=model,
-                system_message=system_message,
-                print_debug=False,
-            )
+            response = _vlm_via_cli(prompt, [image_path], self.vlm_model)
 
             return {
                 "status": "success",
