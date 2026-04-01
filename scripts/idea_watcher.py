@@ -37,6 +37,7 @@ load_dotenv(os.path.join(_REPO_ROOT, ".env"), override=False)
 from consortium.interaction.idea_queue import (
     next_pending, mark_running, mark_completed, mark_failed,
 )
+from publish_research import publish as publish_research
 
 
 def _send_whatsapp(message: str) -> None:
@@ -150,21 +151,29 @@ def process_one(queue_path: str | None, extra_args: list[str] | None = None) -> 
     if exit_code == 0:
         mark_completed(idea_id, queue_path)
 
-        # Check for output paper
-        paper_path = None
+        # Publish to website
+        url_note = ""
         if workspace:
-            for candidate in ("final_paper.pdf", "final_paper.md", "final_paper.tex"):
-                p = os.path.join(workspace, candidate)
-                if os.path.exists(p):
-                    paper_path = p
-                    break
-        paper_note = f"\nPaper: {paper_path}" if paper_path else ""
-        ws_note = f"\nWorkspace: {workspace}" if workspace else ""
+            website_repo = os.environ.get(
+                "WEBSITE_REPO_PATH",
+                os.path.expanduser("~/le-big-mac.github.io"),
+            )
+            try:
+                url_path = publish_research(
+                    workspace=workspace,
+                    website_repo=website_repo,
+                    idea_id=short_id,
+                )
+                if url_path:
+                    site_domain = os.environ.get("WEBSITE_DOMAIN", "le-big-mac.github.io")
+                    url_note = f"\nRead it: https://{site_domain}{url_path}"
+            except Exception as e:
+                print(f"[idea_watcher] Publish failed (non-fatal): {e}")
 
         done_msg = (
             f"[consortium] ✓ Analysis complete for idea {short_id}!\n"
             f"\"{idea_text[:120]}{'...' if len(idea_text) > 120 else ''}\""
-            f"{ws_note}{paper_note}"
+            f"{url_note}"
         )
         _send_whatsapp(done_msg)
         print(f"[idea_watcher] ✓ Idea {short_id} completed successfully.")

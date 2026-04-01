@@ -35,6 +35,8 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=3
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - WEBSITE_REPO_PATH=/website
+      - WEBSITE_DOMAIN=le-big-mac.github.io
     ports:
       - "5003:5003"
     volumes:
@@ -44,6 +46,10 @@ services:
       # Docker bind-mounts a missing file as a directory, so it must exist.
       - ./ideas.json:/app/ideas.json
       - ./.llm_config.yaml:/app/.llm_config.yaml:ro
+      # Website repo for auto-publishing research (mount your GitHub Pages repo)
+      - ~/le-big-mac.github.io:/website
+      # SSH keys for git push (read-only)
+      - ~/.ssh:/root/.ssh:ro
     restart: unless-stopped
 
   # ── Minimal: no web crawl, no Playwright, no GPU — for quick/cheap runs ────
