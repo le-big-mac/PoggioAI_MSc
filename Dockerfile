@@ -133,14 +133,11 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 EXPOSE 5003
 ENTRYPOINT ["python", "launch_multiagent.py"]
 
-# ── Stage 5: idea-receiver (webhook + watcher + GPU) ────────────────────────
+# ── Stage 5: idea-receiver (GitHub Issues watcher + GPU) ─────────────────────
 FROM gpu AS idea-receiver
 
-EXPOSE 5003
 ENTRYPOINT []
-# Start both processes; exit (triggering restart) if either dies.
-# Uses bash for `wait -n` which returns when any child exits.
-CMD ["bash", "-c", "[ -f /app/ideas.json ] || echo '[]' > /app/ideas.json; python -m consortium.interaction.webhook_server --port 5003 & python scripts/idea_watcher.py --interval 30 & wait -n; exit 1"]
+CMD ["python", "scripts/idea_watcher.py", "--repo", "le-big-mac/le-big-mac.github.io", "--interval", "30"]
 
 # Default target is full (CPU)
 FROM full

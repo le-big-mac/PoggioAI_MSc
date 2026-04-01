@@ -94,6 +94,7 @@ def publish(
     website_repo: str,
     title: str | None = None,
     idea_id: str | None = None,
+    issue_number: int | None = None,
     author: str = "Consortium AI",
 ) -> str | None:
     """
@@ -144,6 +145,8 @@ def publish(
     ]
     if idea_id:
         frontmatter_lines.append(f"idea_id: \"{idea_id}\"")
+    if issue_number:
+        frontmatter_lines.append(f"issue_number: {issue_number}")
     if summary_text:
         # Escape quotes in summary for YAML
         safe_summary = summary_text.replace('"', '\\"')
@@ -200,6 +203,7 @@ def main():
     )
     parser.add_argument("--title", default=None, help="Override paper title")
     parser.add_argument("--idea-id", default=None, help="Idea queue ID")
+    parser.add_argument("--issue-number", type=int, default=None, help="GitHub Issue number")
     parser.add_argument("--author", default="Consortium AI", help="Author attribution")
     args = parser.parse_args()
 
@@ -208,6 +212,7 @@ def main():
         website_repo=args.website_repo,
         title=args.title,
         idea_id=args.idea_id,
+        issue_number=args.issue_number,
         author=args.author,
     )
     sys.exit(0 if url else 1)

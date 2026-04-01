@@ -21,8 +21,7 @@ services:
     #   docker compose run consortium --task "Your research task" --no-counsel
     command: ["--help"]
 
-  # ── Idea receiver: WhatsApp webhook + auto-launcher + GPU ──────────────────
-  # Receives ideas via WhatsApp/web form, launches pipeline runs automatically.
+  # ── Idea receiver: polls GitHub Issues, runs pipelines, publishes results ───
   # Start with: docker compose up idea-receiver
   idea-receiver:
     build:
@@ -37,19 +36,12 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - WEBSITE_REPO_PATH=/website
       - WEBSITE_DOMAIN=le-big-mac.github.io
-    ports:
-      - "5003:5003"
     volumes:
       - ./results:/app/results
       - ./logs:/app/logs
-      # Queue file — create before first run: touch ideas.json
-      # Docker bind-mounts a missing file as a directory, so it must exist.
-      - ./ideas.json:/app/ideas.json
       - ./.llm_config.yaml:/app/.llm_config.yaml:ro
-      # Website repo for auto-publishing research (mount your GitHub Pages repo)
+      # Website repo for publishing results
       - ~/le-big-mac.github.io:/website
-      # SSH keys for git push (read-only)
-      - ~/.ssh:/root/.ssh:ro
     restart: unless-stopped
 
   # ── Minimal: no web crawl, no Playwright, no GPU — for quick/cheap runs ────
