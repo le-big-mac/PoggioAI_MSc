@@ -15,23 +15,14 @@ from ..toolkits.writeup.citation_search_tool import CitationSearchTool
 from ..toolkits.writeup.latex_compiler_tool import LaTeXCompilerTool
 from ..toolkits.writeup.latex_syntax_checker_tool import LaTeXSyntaxCheckerTool
 
-try:
-    from ..toolkits.search.open_deep_search.ods_tool import OpenDeepSearchTool
-except (ImportError, ModuleNotFoundError):
-    OpenDeepSearchTool = None
-
-
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
-    tools = [
+    return [
         PaperSearchTool(),
         FetchArxivPapersTool(working_dir=workspace_dir),
         CitationSearchTool(),
         LaTeXCompilerTool(model=model_id, working_dir=workspace_dir),
         LaTeXSyntaxCheckerTool(working_dir=workspace_dir),
     ]
-    if OpenDeepSearchTool is not None:
-        tools.insert(2, OpenDeepSearchTool(model_name=model_id))
-    return tools
 
 
 def build_node(

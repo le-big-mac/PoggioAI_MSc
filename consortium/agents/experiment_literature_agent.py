@@ -14,11 +14,6 @@ from ..toolkits.ideation.paper_search_tool import PaperSearchTool
 from ..toolkits.search.fetch_arxiv_papers.fetch_arxiv_papers_tools import FetchArxivPapersTool
 from ..toolkits.writeup.citation_search_tool import CitationSearchTool
 
-try:
-    from ..toolkits.search.open_deep_search.ods_tool import OpenDeepSearchTool
-except (ImportError, ModuleNotFoundError):
-    OpenDeepSearchTool = None
-
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
@@ -26,8 +21,6 @@ def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
         FetchArxivPapersTool(working_dir=workspace_dir),
         CitationSearchTool(),
     ]
-    if OpenDeepSearchTool is not None:
-        tools.insert(2, OpenDeepSearchTool(model_name=model_id))
     return tools
 
 

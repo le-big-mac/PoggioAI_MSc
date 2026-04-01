@@ -16,12 +16,6 @@ from ..toolkits.writeup.citation_search_tool import CitationSearchTool
 from ..toolkits.math.claim_graph_tool import MathClaimGraphTool
 from ..toolkits.math.proof_workspace_tool import MathProofWorkspaceTool
 
-try:
-    from ..toolkits.search.open_deep_search.ods_tool import OpenDeepSearchTool
-except (ImportError, ModuleNotFoundError):
-    print("[math_literature_agent] WARNING: OpenDeepSearchTool unavailable — falling back to PaperSearch + arXiv only.")
-    OpenDeepSearchTool = None
-
 
 def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
     tools = [
@@ -31,8 +25,6 @@ def get_tools(workspace_dir: Optional[str], model_id: str) -> list:
         MathClaimGraphTool(working_dir=workspace_dir),
         MathProofWorkspaceTool(working_dir=workspace_dir),
     ]
-    if OpenDeepSearchTool is not None:
-        tools.insert(2, OpenDeepSearchTool(model_name=model_id))
     return tools
 
 
