@@ -58,8 +58,9 @@ def _extract_title(workspace: Path, metadata: dict) -> str:
     """Extract a title from the workspace metadata or task."""
     task = metadata.get("task_preview", "")
     if task:
-        # Use first line (issue title) or first sentence
+        # Use first line (issue title), strip quotes for YAML safety
         first_line = task.split("\n")[0].strip()
+        first_line = first_line.replace('"', "'")
         if first_line:
             return first_line[:100]
     return f"Research Run {workspace.name}"
@@ -257,7 +258,7 @@ status: "{status}"
 pipeline_run: "{run_id}"{issue_line}{pdf_line}
 ---
 
-**Task:** {task[:500]}
+**Task:** {task}
 
 {verdict_text}
 
