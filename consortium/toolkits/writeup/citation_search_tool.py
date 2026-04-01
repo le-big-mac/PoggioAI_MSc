@@ -23,56 +23,18 @@ from typing import List, Dict, Any, Optional
 from ...workflow_utils import safe_int_env as _safe_int_env, safe_float_env as _safe_float_env
 
 
-class CitationSearchToolInput(BaseModel):
-    search_query: str = Field(description="Search query for papers (keywords, title, author, or topic)")
-    max_results: Optional[int] = Field(default=None, description="Maximum number of papers to return (default: 10)")
-    search_source: Optional[str] = Field(default=None, description="Search database (default: 'both'):\n• 'arxiv': Search only arXiv preprints (faster, ML/CS focused, may miss published papers)\n• 'semantic_scholar': Search only Semantic Scholar (broader coverage, includes journals/conferences)\n• 'both': Search both databases for comprehensive results (recommended for literature reviews)")
-
-
 class CitationSearchTool:
-    name: str = "citation_search_tool"
-    description: str = """
-    Search for academic papers and generate properly formatted citations for LaTeX papers.
-
-    This tool is essential for:
-    - Finding relevant papers for your literature review
-    - Generating BibTeX entries for LaTeX documents
-    - Discovering related work in your research area
-    - Validating and formatting academic citations
-    - Building comprehensive bibliographies
-
-    Use this tool when:
-    - You need to cite papers in your LaTeX writeup
-    - You want to find related work on a specific topic
-    - You need properly formatted BibTeX entries
-    - You're building a literature review section
-    - You want to discover recent papers in your field
-
-    The tool searches both arXiv and Semantic Scholar to provide comprehensive coverage
-    of academic literature, with focus on computer science and machine learning papers.
-
-    Input: Search query or paper title/author
-    Output: Structured citations with BibTeX entries and metadata
-    """
-    arxiv_base_url: str = "http://export.arxiv.org/api/query?"
-    semantic_scholar_base_url: str = "https://api.semanticscholar.org/graph/v1/paper/search"
-    semantic_scholar_max_retries: int = 3
-    semantic_scholar_base_delay: float = 2.0
-    semantic_scholar_cooldown: float = 60.0
-    semantic_scholar_timeout: int = 30
-    _semantic_scholar_cooldown_until: float = 0.0
-    _cache_ttl_seconds: int = 1800
-    _cache_max_entries: int = 256
-    _cache: Dict[str, Dict[str, Any]] = {}
-
     def __init__(self, **kwargs: Any):
-        super().__init__(
-            semantic_scholar_max_retries=self._safe_int_env("CONSORTIUM_SS_MAX_RETRIES", 3),
-            semantic_scholar_base_delay=self._safe_float_env("CONSORTIUM_SS_BASE_DELAY_SEC", 2.0),
-            semantic_scholar_cooldown=self._safe_float_env("CONSORTIUM_SS_COOLDOWN_SEC", 60.0),
-            semantic_scholar_timeout=self._safe_int_env("CONSORTIUM_SS_TIMEOUT_SEC", 30),
-            **kwargs,
-        )
+        self.arxiv_base_url = "http://export.arxiv.org/api/query?"
+        self.semantic_scholar_base_url = "https://api.semanticscholar.org/graph/v1/paper/search"
+        self.semantic_scholar_max_retries = self._safe_int_env("CONSORTIUM_SS_MAX_RETRIES", 3)
+        self.semantic_scholar_base_delay = self._safe_float_env("CONSORTIUM_SS_BASE_DELAY_SEC", 2.0)
+        self.semantic_scholar_cooldown = self._safe_float_env("CONSORTIUM_SS_COOLDOWN_SEC", 60.0)
+        self.semantic_scholar_timeout = self._safe_int_env("CONSORTIUM_SS_TIMEOUT_SEC", 30)
+        self._semantic_scholar_cooldown_until = 0.0
+        self._cache_ttl_seconds = 1800
+        self._cache_max_entries = 256
+        self._cache: Dict[str, Dict[str, Any]] = {}
 
     # Use module-level _safe_int_env / _safe_float_env from workflow_utils
     _safe_int_env = staticmethod(_safe_int_env)

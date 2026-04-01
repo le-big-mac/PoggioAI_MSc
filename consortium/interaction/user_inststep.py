@@ -7,10 +7,8 @@ socket into a form that can be injected into ResearchState.messages.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List, Optional
-
-from langchain_core.messages import HumanMessage
+from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
@@ -26,6 +24,6 @@ class UserInstructionStep:
     user_instruction: str
     is_new_task: bool = False
 
-    def to_messages(self) -> List[HumanMessage]:
+    def to_messages(self) -> List[dict]:
         prefix = "New task from user" if self.is_new_task else "Additional instruction from the user"
-        return [HumanMessage(content=f"{prefix}:\n{self.user_instruction}")]
+        return [{"role": "human", "content": f"{prefix}:\n{self.user_instruction}"}]

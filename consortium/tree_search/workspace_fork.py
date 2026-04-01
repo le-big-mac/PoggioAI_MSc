@@ -12,7 +12,6 @@ import shutil
 import time
 from typing import Any, List
 
-from langchain_core.tools import BaseTool
 
 # Patterns to skip when copying a workspace into a branch.
 SKIP_PATTERNS = ("counsel_sandboxes", "tree_branches", "*.db", "*.lock")
@@ -84,15 +83,15 @@ def merge_branch(
 # ---------------------------------------------------------------------------
 
 def retarget_tools(
-    original_tools: List[BaseTool],
+    original_tools: List[Any],
     new_workspace: str,
-) -> List[BaseTool]:
+) -> List[Any]:
     """Clone each tool so that workspace/working-dir paths point to *new_workspace*.
 
     Falls back to the original tool when re-instantiation fails.
     Semantics match ``counsel._sandbox_tools``.
     """
-    result: list[BaseTool] = []
+    result: list[Any] = []
     for tool in original_tools:
         try:
             cls = type(tool)

@@ -16,7 +16,6 @@ import threading
 from queue import Empty, Queue
 from typing import Callable, Iterable, Optional
 
-from langchain_core.messages import HumanMessage
 
 from .user_inststep import UserInstructionStep
 
@@ -94,7 +93,7 @@ _INTERRUPT_SIGNALS = frozenset({"interrupt", "stop", "pause"})
 def make_interrupt_checker(
     input_queue: Queue,
     interrupt_signals: Optional[Iterable[str]] = None,
-) -> Callable[[], Optional[HumanMessage]]:
+) -> Callable[[], Optional[dict]]:
     """
     Return a zero-arg callable that the manager node should call once per step.
 
@@ -138,7 +137,7 @@ def make_interrupt_checker(
                 break
         return "\n".join(lines).strip()
 
-    def check() -> Optional[HumanMessage]:
+    def check() -> Optional[dict]:
         nonlocal paused
 
         if not paused:
