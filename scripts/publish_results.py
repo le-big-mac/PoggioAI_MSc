@@ -86,20 +86,14 @@ def _extract_paper(workspace: Path) -> str:
         if path.exists():
             return _read_file(str(path))
 
-    # Fall back to LaTeX — wrap in display blocks for MathJax
+    # Fall back to LaTeX — convert to Markdown for website display
     for candidate in ["final_paper.tex", "paper_workspace/final_paper.tex"]:
         path = workspace / candidate
         if path.exists():
             tex = _read_file(str(path))
-            # Strip LaTeX preamble/document wrappers, keep content
-            tex = re.sub(
-                r"\\documentclass.*?\\begin\{document\}",
-                "", tex, flags=re.DOTALL,
-            )
-            tex = tex.replace("\\end{document}", "")
-            tex = tex.strip()
-            if tex:
-                return f"```latex\n{tex}\n```"
+            if tex.strip():
+                from consortium.graph import _latex_to_markdown
+                return _latex_to_markdown(tex)
     return ""
 
 

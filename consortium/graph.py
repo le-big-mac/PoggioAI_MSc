@@ -130,6 +130,88 @@ def _read_file_for_verdict(path: str, max_chars: int = 50000) -> str:
         return ""
 
 
+def _latex_to_markdown(tex: str) -> str:
+    """Best-effort LaTeX → Markdown conversion for display on a website."""
+    import re as _re
+
+    # Strip preamble (everything before \begin{document}) and \end{document}
+    m = _re.search(r"\\begin\{document\}(.*?)(?:\\end\{document\})?$", tex, _re.DOTALL)
+    if m:
+        tex = m.group(1)
+
+    # Remove \maketitle, \tableofcontents, \newpage
+    tex = _re.sub(r"\\(?:maketitle|tableofcontents|newpage|clearpage)\b", "", tex)
+
+    # Sections → Markdown headings
+    tex = _re.sub(r"\\section\*?\{([^}]*)\}", r"## \1", tex)
+    tex = _re.sub(r"\\subsection\*?\{([^}]*)\}", r"### \1", tex)
+    tex = _re.sub(r"\\subsubsection\*?\{([^}]*)\}", r"#### \1", tex)
+    tex = _re.sub(r"\\paragraph\*?\{([^}]*)\}", r"**\1**", tex)
+
+    # Text formatting
+    tex = _re.sub(r"\\textbf\{([^}]*)\}", r"**\1**", tex)
+    tex = _re.sub(r"\\textit\{([^}]*)\}", r"*\1*", tex)
+    tex = _re.sub(r"\\emph\{([^}]*)\}", r"*\1*", tex)
+    tex = _re.sub(r"\\texttt\{([^}]*)\}", r"`\1`", tex)
+    tex = _re.sub(r"\\underline\{([^}]*)\}", r"\1", tex)
+
+    # Citations → (Author, Year) style
+    tex = _re.sub(r"\\citep?\{([^}]*)\}", r"(\1)", tex)
+    tex = _re.sub(r"\\citet\{([^}]*)\}", r"\1", tex)
+
+    # Lists: \begin{itemize}...\end{itemize}, \begin{description}...\end{description}
+    tex = _re.sub(r"\\begin\{(?:itemize|enumerate|description)\}(?:\[.*?\])?", "", tex)
+    tex = _re.sub(r"\\end\{(?:itemize|enumerate|description)\}", "", tex)
+    tex = _re.sub(r"\\item\s*\[([^\]]*)\]\s*", r"- **\1** ", tex)
+    tex = _re.sub(r"\\item\s*", "- ", tex)
+
+    # Math environments: keep $...$ and $$...$$ as-is (MathJax renders them)
+    # Convert \[ \] to $$ $$
+    tex = tex.replace("\\[", "$$").replace("\\]", "$$")
+
+    # Theorem-like environments → bold header + content
+    for env in ("theorem", "lemma", "proposition", "definition", "remark", "corollary", "conjecture"):
+        tex = _re.sub(
+            rf"\\begin\{{{env}\}}(?:\[([^\]]*)\])?",
+            lambda m, e=env: f"\n**{e.title()}" + (f" ({m.group(1)})" if m.group(1) else "") + ".**",
+            tex,
+        )
+        tex = _re.sub(rf"\\end\{{{env}\}}", "", tex)
+
+    # Proof environment
+    tex = _re.sub(r"\\begin\{proof\}(?:\[([^\]]*)\])?",
+                  lambda m: "\n*Proof" + (f" ({m.group(1)})" if m.group(1) else "") + ".*",
+                  tex)
+    tex = _re.sub(r"\\end\{proof\}", "$$\\\\square$$\n", tex)
+
+    # Tables: simplify (just strip the environment, keep content)
+    tex = _re.sub(r"\\begin\{(?:table|tabular|longtable|tabularx)\}(?:\[.*?\])?\{[^}]*\}", "", tex)
+    tex = _re.sub(r"\\end\{(?:table|tabular|longtable|tabularx)\}", "", tex)
+    tex = _re.sub(r"\\(?:hline|toprule|midrule|bottomrule|cline\{[^}]*\})", "---", tex)
+    tex = _re.sub(r"\\caption\{([^}]*)\}", r"*\1*", tex)
+
+    # Figures
+    tex = _re.sub(r"\\begin\{figure\}(?:\[.*?\])?", "", tex)
+    tex = _re.sub(r"\\end\{figure\}", "", tex)
+    tex = _re.sub(r"\\includegraphics(?:\[.*?\])?\{([^}]*)\}", r"![figure](\1)", tex)
+
+    # URLs and hrefs
+    tex = _re.sub(r"\\href\{([^}]*)\}\{([^}]*)\}", r"[\2](\1)", tex)
+    tex = _re.sub(r"\\url\{([^}]*)\}", r"[\1](\1)", tex)
+
+    # Footnotes → parenthetical
+    tex = _re.sub(r"\\footnote\{([^}]*)\}", r" (\1)", tex)
+
+    # Strip remaining commands we don't handle
+    tex = _re.sub(r"\\(?:label|ref|eqref|pageref|vspace|hspace|noindent|centering|small|large|Large|footnotesize|normalsize)\b\{?[^}]*\}?", "", tex)
+    tex = _re.sub(r"\\(?:newcommand|renewcommand|DeclareMathOperator)\{[^}]*\}(?:\[[^\]]*\])?\{[^}]*\}", "", tex)
+
+    # Clean up excessive blank lines
+    tex = _re.sub(r"\n{3,}", "\n\n", tex)
+
+    return tex.strip()
+
+
 def build_quick_verdict_node(workspace_dir: str) -> Any:
     """Terminal node for the quick-pass pipeline.
 
@@ -194,7 +276,10 @@ def build_quick_verdict_node(workspace_dir: str) -> Any:
                             f"{num_approaches} approaches identified\n")
         if lit_review_text:
             sections.append("## Literature Review\n")
-            sections.append(lit_review_text)
+            if lit_review_text.lstrip().startswith("\\"):
+                sections.append(_latex_to_markdown(lit_review_text))
+            else:
+                sections.append(lit_review_text)
             sections.append("")
         if claims:
             sections.append("## Novelty Assessment\n")
@@ -205,7 +290,10 @@ def build_quick_verdict_node(workspace_dir: str) -> Any:
             sections.append("")
         if plan_text:
             sections.append("## Research Plan\n")
-            sections.append(plan_text)
+            if plan_text.lstrip().startswith("\\"):
+                sections.append(_latex_to_markdown(plan_text))
+            else:
+                sections.append(plan_text)
 
         final_path = os.path.join(workspace_dir, "final_paper.md")
         with open(final_path, "w") as f:
