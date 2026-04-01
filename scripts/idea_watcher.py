@@ -114,16 +114,41 @@ def close_issue(repo: str, issue_number: int) -> None:
 # Slash command parsing
 # ---------------------------------------------------------------------------
 
-COMMANDS = {"plan", "full", "theory", "experiment", "close"}
+COMMANDS = {"plan", "run", "close"}
+MODIFIERS = {"counsel", "theory"}
 
 
-def parse_command(text: str) -> tuple[str | None, str]:
-    """Parse a slash command from comment text. Returns (command, feedback) or (None, "")."""
+def parse_command(text: str) -> tuple[str | None, list[str], str]:
+    """Parse a command from comment text.
+
+    Returns (command, modifiers, feedback) or (None, [], "").
+
+    Examples:
+        "plan add kernel methods"       → ("plan", [], "add kernel methods")
+        "run counsel theory focus on X" → ("run", ["counsel", "theory"], "focus on X")
+        "run experiment only, 5 seeds"  → ("run", [], "experiment only, 5 seeds")
+        "close"                         → ("close", [], "")
+    """
     text = text.strip()
-    m = re.match(r"^/(\w+)\s*(.*)", text, re.DOTALL)
-    if m and m.group(1).lower() in COMMANDS:
-        return m.group(1).lower(), m.group(2).strip()
-    return None, ""
+    # Strip leading / if present (support both "plan" and "/plan")
+    if text.startswith("/"):
+        text = text[1:]
+
+    words = text.split()
+    if not words or words[0].lower() not in COMMANDS:
+        return None, [], ""
+
+    command = words[0].lower()
+    modifiers = []
+    feedback_words = []
+
+    for word in words[1:]:
+        if word.lower() in MODIFIERS:
+            modifiers.append(word.lower())
+        else:
+            feedback_words.append(word)
+
+    return command, modifiers, " ".join(feedback_words).strip()
 
 
 # ---------------------------------------------------------------------------
@@ -193,16 +218,16 @@ def build_task_with_feedback(idea: str, feedback: str, prior_plan_path: str | No
 # Command handlers
 # ---------------------------------------------------------------------------
 
-def _pipeline_args_for_command(command: str) -> list[str]:
+def _pipeline_args_for_command(command: str, modifiers: list[str]) -> list[str]:
+    args = []
     if command == "plan":
-        return ["--quick-pass"]
-    elif command == "theory":
-        return ["--enable-math-agents"]
-    elif command == "experiment":
-        return []
-    elif command == "full":
-        return []
-    return []
+        args.append("--quick-pass")
+    # Modifiers apply to any command
+    if "counsel" in modifiers:
+        args.append("--enable-counsel")
+    if "theory" in modifiers:
+        args.append("--enable-math-agents")
+    return args
 
 
 def _publish_and_comment(
@@ -247,20 +272,19 @@ def _publish_and_comment(
             print(f"[watcher] Publish failed: {e}")
 
     if exit_code == 0:
-        mode = {"plan": "Quick assessment", "full": "Full analysis",
-                "theory": "Theory analysis", "experiment": "Experiment analysis"}.get(command, "Analysis")
+        mode = "Quick assessment" if command == "plan" else "Full analysis"
         body = f"**{mode} complete.**\n\n"
         if url_path:
             body += f"Read the results: [https://{domain}{url_path}](https://{domain}{url_path})\n\n"
         if workspace:
             body += f"Workspace: `{workspace}`\n"
-        body += "\nCommands: `/plan`, `/full`, `/theory`, `/experiment`, `/close`"
+        body += "\nCommands: `plan`, `run`, `run counsel`, `run theory`, `run counsel theory`, `close`"
         add_comment(repo, issue_number, body)
     else:
         body = f"**Run failed** (exit code {exit_code}).\n\n"
         if workspace:
             body += f"Check logs in `{workspace}`\n"
-        body += "\nYou can retry with `/plan`, `/full`, etc."
+        body += "\nRetry with: `plan`, `run`, `run counsel`, etc."
         add_comment(repo, issue_number, body)
 
     return url_path
@@ -286,8 +310,8 @@ def handle_new_issue(repo: str, issue: dict) -> None:
     _publish_and_comment(repo, number, workspace, "plan", exit_code)
 
 
-def handle_command(repo: str, issue: dict, command: str, feedback: str) -> None:
-    """Handle a slash command on an existing issue."""
+def handle_command(repo: str, issue: dict, command: str, modifiers: list[str], feedback: str) -> None:
+    """Handle a command on an existing issue."""
     number = issue["number"]
     idea = f"{issue['title']}\n\n{issue.get('body', '') or ''}".strip()
 
@@ -299,7 +323,6 @@ def handle_command(repo: str, issue: dict, command: str, feedback: str) -> None:
     # Find prior workspace for context (if re-running plan)
     prior_plan = None
     if command == "plan":
-        # Look for existing final_paper.md in the most recent workspace for this issue
         results_dir = os.path.join(_REPO_ROOT, "results")
         if os.path.isdir(results_dir):
             for d in sorted(os.listdir(results_dir), reverse=True):
@@ -309,11 +332,11 @@ def handle_command(repo: str, issue: dict, command: str, feedback: str) -> None:
                     break
 
     task = build_task_with_feedback(idea, feedback, prior_plan)
-    pipeline_args = _pipeline_args_for_command(command)
+    pipeline_args = _pipeline_args_for_command(command, modifiers)
 
-    mode = {"plan": "quick assessment", "full": "full analysis",
-            "theory": "theory analysis", "experiment": "experiment analysis"}[command]
-    msg = f"Starting {mode}..."
+    mode = "quick assessment" if command == "plan" else "full analysis"
+    mod_str = f" ({', '.join(modifiers)})" if modifiers else ""
+    msg = f"Starting {mode}{mod_str}..."
     if feedback:
         msg += f"\n\nFeedback noted:\n> {feedback[:500]}"
     add_comment(repo, number, msg)
@@ -387,9 +410,9 @@ def poll_once(repo: str, state_path: str) -> bool:
             _save_seen(state_path, seen)
 
         for comment in new_comments:
-            command, feedback = parse_command(comment.get("body", ""))
+            command, modifiers, feedback = parse_command(comment.get("body", ""))
             if command:
-                handle_command(repo, issue, command, feedback)
+                handle_command(repo, issue, command, modifiers, feedback)
                 did_work = True
                 # Only handle one command per poll to avoid overload
                 return True
