@@ -472,7 +472,7 @@ def main():
         args.require_experiment_plan = False
         from .graph import build_pipeline_stages_quick
         pipeline_stages = build_pipeline_stages_quick()
-        print("Pipeline mode: quick-pass (no experiments, no paper)")
+        print("Pipeline mode: quick-pass (no experiments, proposal artifact only)")
     else:
         print("Pipeline mode: full_research (fixed-stage)")
         if args.enable_math_agents:

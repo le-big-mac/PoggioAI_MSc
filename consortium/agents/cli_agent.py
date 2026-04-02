@@ -165,6 +165,85 @@ _RUNNERS = {
 }
 
 
+def run_cli_agent_subprocess(
+    *,
+    cli_backend: str,
+    prompt: str,
+    workspace_dir: str,
+    agent_name: str,
+    model: Optional[str] = None,
+    timeout_seconds: int = 3600,
+    allowed_tools: Optional[List[str]] = None,
+    session_id: Optional[str] = None,
+    resume: bool = False,
+    track_budget: bool = True,
+) -> dict:
+    """Run a CLI backend using the shared agent subprocess plumbing.
+
+    Returns a dict with:
+      - ``result``: ``subprocess.CompletedProcess``
+      - ``output``: extracted final stdout content
+      - ``elapsed``: wall-clock duration in seconds
+      - ``session_id``: stable/resolved session ID after the call
+    """
+    runner = _RUNNERS.get(cli_backend)
+    if runner is None:
+        raise ValueError(
+            f"Unknown CLI backend: {cli_backend!r}. "
+            f"Supported: {list(_RUNNERS.keys())}"
+        )
+
+    meta: dict = {}
+    env = _base_env(cli_backend, model, agent_name)
+    t0 = time.time()
+
+    if cli_backend == "claude":
+        result = runner(
+            prompt, workspace_dir, model, timeout_seconds,
+            allowed_tools, session_id=session_id, resume=resume, metadata=meta, env=env,
+        )
+    else:
+        result = runner(
+            prompt, workspace_dir, model, timeout_seconds,
+            session_id=session_id, resume=resume, metadata=meta, env=env,
+        )
+
+    elapsed = time.time() - t0
+    resolved_session_id = session_id
+
+    if cli_backend == "codex" and result.stderr:
+        from ..cli_completion import extract_session_id
+        real_session = extract_session_id(result.stderr)
+        if real_session:
+            resolved_session_id = real_session
+
+    output = _extract_final_output(result.stdout or "")
+
+    if track_budget:
+        try:
+            from ..cli_budget import get_global_cli_tracker
+            tracker = get_global_cli_tracker()
+            if tracker is not None:
+                tracker.record_invocation(
+                    agent_name=agent_name,
+                    backend=cli_backend,
+                    model=model or "default",
+                    resumed=resume,
+                    duration_seconds=elapsed,
+                    prompt_chars=len(prompt),
+                    output_chars=len(output),
+                )
+        except Exception:
+            pass  # Never break the pipeline for tracking errors
+
+    return {
+        "result": result,
+        "output": output,
+        "elapsed": elapsed,
+        "session_id": resolved_session_id,
+    }
+
+
 def create_cli_agent(
     cli_backend: str,
     system_prompt: str,
@@ -194,13 +273,6 @@ def create_cli_agent(
     Returns:
         A callable ``node_fn(state) -> state_update`` for LangGraph.
     """
-    runner = _RUNNERS.get(cli_backend)
-    if runner is None:
-        raise ValueError(
-            f"Unknown CLI backend: {cli_backend!r}. "
-            f"Supported: {list(_RUNNERS.keys())}"
-        )
-
     def node_fn(state: dict) -> dict:
         task = state.get("agent_task") or state.get("task", "")
         prompt = _build_prompt(system_prompt, task, workspace_dir, agent_name)
@@ -217,21 +289,19 @@ def create_cli_agent(
             "[CLI Agent] %s starting — backend=%s model=%s cwd=%s resume=%s",
             agent_name, cli_backend, model, workspace_dir, is_resume,
         )
-        t0 = time.time()
-        meta: dict = {}
-        env = _base_env(cli_backend, model, agent_name)
 
         try:
-            if cli_backend == "claude":
-                result = runner(
-                    prompt, workspace_dir, model, timeout_seconds,
-                    allowed_tools, session_id=session_id, resume=is_resume, metadata=meta, env=env,
-                )
-            else:
-                result = runner(
-                    prompt, workspace_dir, model, timeout_seconds,
-                    session_id=session_id, resume=is_resume, metadata=meta, env=env,
-                )
+            run = run_cli_agent_subprocess(
+                cli_backend=cli_backend,
+                prompt=prompt,
+                workspace_dir=workspace_dir,
+                agent_name=agent_name,
+                model=model,
+                timeout_seconds=timeout_seconds,
+                allowed_tools=allowed_tools,
+                session_id=session_id,
+                resume=is_resume,
+            )
         except subprocess.TimeoutExpired:
             output = (
                 f"[{agent_name}] CLI agent timed out after {timeout_seconds}s. "
@@ -246,13 +316,12 @@ def create_cli_agent(
                 result_state["_cli_agent_sessions"] = sessions
             return result_state
 
-        elapsed = time.time() - t0
+        result = run["result"]
+        elapsed = run["elapsed"]
+        output = run["output"]
 
-        if cli_backend == "codex" and result.stderr:
-            from ..cli_completion import extract_session_id
-            real_session = extract_session_id(result.stderr)
-            if real_session:
-                sessions[agent_name] = real_session
+        if use_session and run["session_id"]:
+            sessions[agent_name] = run["session_id"]
 
         if result.returncode != 0:
             stderr_snippet = (result.stderr or "")[:2000]
@@ -267,23 +336,6 @@ def create_cli_agent(
                 "[CLI Agent] %s completed in %.1fs — output length: %d chars",
                 agent_name, elapsed, len(output),
             )
-
-        # Record invocation for CLI budget tracking
-        try:
-            from ..cli_budget import get_global_cli_tracker
-            tracker = get_global_cli_tracker()
-            if tracker is not None:
-                tracker.record_invocation(
-                    agent_name=agent_name,
-                    backend=cli_backend,
-                    model=model or "default",
-                    resumed=is_resume,
-                    duration_seconds=elapsed,
-                    prompt_chars=len(prompt),
-                    output_chars=len(output),
-                )
-        except Exception:
-            pass  # Never break the pipeline for tracking errors
 
         # Check mandatory artifacts after agent completes
         if mandatory_artifacts:

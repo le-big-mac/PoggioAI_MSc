@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from typing import Any, Callable, List, Optional
 
 from langgraph.graph import END, StateGraph
@@ -222,7 +223,7 @@ def build_quick_verdict_node(workspace_dir: str, cli_backend_registry=None) -> A
     """
 
     def quick_verdict_node(state: dict) -> dict:
-        import subprocess as _sp
+        from .agents.cli_agent import run_cli_agent_subprocess
 
         paper_ws = os.path.join(workspace_dir, "paper_workspace")
 
@@ -318,31 +319,33 @@ the LaTeX errors and try again.
             backend = spec.backend
             model = spec.model
 
-        cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "30"]
-        if model:
-            cmd.extend(["--model", model])
-        cmd.extend(["--allowedTools",
-                     "Read,Write,Edit,WebFetch,WebSearch,Bash(tectonic*),Bash(cat*),Bash(ls*),Bash(curl*),Grep,Glob"])
-
-        if backend == "codex":
-            cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
-            if model:
-                cmd.extend(["--model", model])
-        elif backend == "gemini":
-            cmd = ["gemini", "--approval-mode", "yolo"]
-            if model:
-                cmd.extend(["--model", model])
-
         print(f"[quick_verdict] Composing proposal document via {backend}...")
         try:
-            result = _sp.run(
-                cmd, input=compose_prompt, capture_output=True, text=True,
-                cwd=workspace_dir, timeout=600,
-                env=os.environ.copy(),
+            run = run_cli_agent_subprocess(
+                cli_backend=backend,
+                prompt=compose_prompt,
+                workspace_dir=workspace_dir,
+                agent_name="quick_verdict",
+                model=model,
+                timeout_seconds=600,
+                allowed_tools=[
+                    "Read",
+                    "Write",
+                    "Edit",
+                    "WebFetch",
+                    "WebSearch",
+                    "Bash(tectonic*)",
+                    "Bash(cat*)",
+                    "Bash(ls*)",
+                    "Bash(curl*)",
+                    "Grep",
+                    "Glob",
+                ],
             )
+            result = run["result"]
             if result.returncode != 0:
                 print(f"[quick_verdict] Agent returned code {result.returncode}: {(result.stderr or '')[:300]}")
-        except _sp.TimeoutExpired:
+        except subprocess.TimeoutExpired:
             print("[quick_verdict] Proposal composition timed out (600s)")
         except FileNotFoundError:
             print(f"[quick_verdict] CLI tool '{backend}' not found on PATH")
@@ -357,22 +360,6 @@ the LaTeX errors and try again.
         else:
             print("[quick_verdict] No output produced — check agent logs")
 
-        # Budget tracking
-        try:
-            from .cli_budget import get_global_cli_tracker
-            tracker = get_global_cli_tracker()
-            if tracker is not None:
-                tracker.record_invocation(
-                    agent_name="quick_verdict",
-                    backend=backend,
-                    model=model or "default",
-                    duration_seconds=0,  # subprocess already finished
-                    prompt_chars=len(compose_prompt),
-                    output_chars=0,
-                )
-        except Exception:
-            pass
-
         return {"finished": True}
 
     quick_verdict_node.__name__ = "quick_verdict"
@@ -386,9 +373,8 @@ def build_quick_develop_node(workspace_dir: str, cli_backend_registry=None) -> A
     Reads any linked papers, fills in hypotheses/methods/experiments, and
     writes a proper proposal — staying on the user's original direction.
     """
-    import subprocess as _sp
-
     def quick_develop_node(state: dict) -> dict:
+        from .agents.cli_agent import run_cli_agent_subprocess
         from datetime import date as _date
         task = state.get("task", "")
         today = _date.today().isoformat()
@@ -428,29 +414,30 @@ THE RAW IDEA:
             backend = spec.backend
             model = spec.model
 
-        cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "20"]
-        if model:
-            cmd.extend(["--model", model])
-        cmd.extend(["--allowedTools",
-                     "Read,Write,Edit,WebFetch,WebSearch,Bash(curl*),Bash(cat*),Bash(ls*),Bash(python*),Glob,Grep"])
-
-        if backend == "codex":
-            cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
-            if model:
-                cmd.extend(["--model", model])
-        elif backend == "gemini":
-            cmd = ["gemini", "--approval-mode", "yolo"]
-            if model:
-                cmd.extend(["--model", model])
-
         print("[quick_develop] Developing raw idea into structured proposal...")
         try:
-            _sp.run(
-                cmd, input=prompt, capture_output=True, text=True,
-                cwd=workspace_dir, timeout=600,
-                env=os.environ.copy(),
+            run_cli_agent_subprocess(
+                cli_backend=backend,
+                prompt=prompt,
+                workspace_dir=workspace_dir,
+                agent_name="quick_develop",
+                model=model,
+                timeout_seconds=600,
+                allowed_tools=[
+                    "Read",
+                    "Write",
+                    "Edit",
+                    "WebFetch",
+                    "WebSearch",
+                    "Bash(curl*)",
+                    "Bash(cat*)",
+                    "Bash(ls*)",
+                    "Bash(python*)",
+                    "Glob",
+                    "Grep",
+                ],
             )
-        except (_sp.TimeoutExpired, FileNotFoundError) as e:
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
             print(f"[quick_develop] Error: {e}")
 
         # Read the developed proposal and use it as the task for persona council

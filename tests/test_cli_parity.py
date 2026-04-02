@@ -121,3 +121,34 @@ def test_cli_agent_without_persistence_does_not_store_session(tmp_path):
         result = node({"task": "review"})
 
     assert "_cli_agent_sessions" not in result
+
+
+def test_run_cli_agent_subprocess_records_budget_and_codex_session(tmp_path):
+    from consortium.agents.cli_agent import run_cli_agent_subprocess
+    from consortium.cli_budget import CLIBudgetTracker, set_global_cli_tracker
+
+    tracker = CLIBudgetTracker(state_dir=str(tmp_path))
+    set_global_cli_tracker(tracker)
+
+    def fake_runner(prompt, workspace_dir, model, timeout, session_id=None, resume=False, metadata=None, env=None):
+        return subprocess.CompletedProcess(
+            args=["codex"],
+            returncode=0,
+            stdout="<FINAL_OUTPUT>done</FINAL_OUTPUT>",
+            stderr="Session ID: abc-123\n",
+        )
+
+    with patch("consortium.agents.cli_agent._RUNNERS", {"codex": fake_runner}):
+        run = run_cli_agent_subprocess(
+            cli_backend="codex",
+            prompt="test prompt",
+            workspace_dir=str(tmp_path),
+            agent_name="quick_verdict",
+            model="gpt-5.4",
+        )
+
+    assert run["output"] == "done"
+    assert run["session_id"] == "abc-123"
+    assert tracker.summary["invocation_count"] == 1
+    assert tracker.summary["by_agent"]["quick_verdict"] >= 0
+    set_global_cli_tracker(None)
