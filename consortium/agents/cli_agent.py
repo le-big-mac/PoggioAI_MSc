@@ -27,6 +27,12 @@ _OUTPUT_END = "</FINAL_OUTPUT>"
 
 def _base_env(cli_backend: str, model: Optional[str], agent_name: str) -> dict:
     env = os.environ.copy()
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        repo_root if not existing_pythonpath else f"{repo_root}:{existing_pythonpath}"
+    )
+    env["CONSORTIUM_REPO_ROOT"] = repo_root
     env["CONSORTIUM_ACTIVE_CLI_BACKEND"] = cli_backend
     if model:
         env["CONSORTIUM_ACTIVE_CLI_MODEL"] = model
@@ -325,9 +331,11 @@ def create_cli_agent(
 
         if result.returncode != 0:
             stderr_snippet = (result.stderr or "")[:2000]
+            stdout_snippet = (result.stdout or "")[:2000]
             output = (
                 f"[{agent_name}] CLI agent exited with code {result.returncode}.\n"
-                f"stderr: {stderr_snippet}"
+                f"stderr: {stderr_snippet}\n"
+                f"stdout: {stdout_snippet}"
             )
             logger.error(output)
         else:

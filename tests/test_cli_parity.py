@@ -152,3 +152,12 @@ def test_run_cli_agent_subprocess_records_budget_and_codex_session(tmp_path):
     assert tracker.summary["invocation_count"] == 1
     assert tracker.summary["by_agent"]["quick_verdict"] >= 0
     set_global_cli_tracker(None)
+
+
+def test_base_env_includes_repo_root_on_pythonpath():
+    from consortium.agents.cli_agent import _base_env
+
+    env = _base_env("claude", "claude-opus-4-6", "literature_review_agent")
+
+    assert env["CONSORTIUM_REPO_ROOT"]
+    assert env["CONSORTIUM_REPO_ROOT"] in env["PYTHONPATH"].split(":")
