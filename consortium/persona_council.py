@@ -194,8 +194,11 @@ def run_persona_council(
     # Phase 1+2: Spawn all personas in parallel (each does eval + debate)
     # ------------------------------------------------------------------
 
-    def _run_persona(spec: Dict[str, Any]) -> Tuple[str, str, str]:
+    def _run_persona(spec: Dict[str, Any], task_override: Optional[str] = None,
+                     coord_dir_override: Optional[str] = None) -> Tuple[str, str, str]:
         """Run one persona through eval + wait + debate + verdict in a single CLI session."""
+        effective_task = task_override or task
+        effective_coord_dir = coord_dir_override or coord_dir
         persona_name = spec["persona"]
         model_id = spec["model"]
         backend = _model_to_backend(model_id)
@@ -203,17 +206,19 @@ def run_persona_council(
 
         peers = [s["persona"] for s in specs if s["persona"] != persona_name]
 
+        cd = effective_coord_dir
+
         # Build wait commands for initial eval barrier
         wait_for_evals = " && ".join(
-            f'while [ ! -f "{coord_dir}/{p}.md" ]; do sleep 3; done'
+            f'while [ ! -f "{cd}/{p}.md" ]; do sleep 3; done'
             for p in peers
         )
 
-        peer_files_str = " ".join(f"{coord_dir}/{p}.md" for p in peers)
+        peer_files_str = " ".join(f"{cd}/{p}.md" for p in peers)
 
         # Example wait command for round N (used in the prompt as a template)
         wait_example = " && ".join(
-            f'while [ ! -f "{coord_dir}/{p}_round{{N}}.done" ]; do sleep 3; done'
+            f'while [ ! -f "{cd}/{p}_round{{N}}.done" ]; do sleep 3; done'
             for p in peers
         )
 
@@ -227,7 +232,7 @@ INSTRUCTIONS — complete ALL steps in order within this single session:
 STEP 1: EVALUATE
 Read and evaluate the following research proposal from your persona's lens.
 Write your evaluation (assessment, strengths, gaps, initial verdict) to:
-  {coord_dir}/{persona_name}.md
+  {cd}/{persona_name}.md
 
 STEP 2: WAIT FOR PEER EVALUATIONS
 Run this command to wait for the other personas to finish their evaluations:
@@ -240,13 +245,13 @@ For each round N from 1 to {max_debate_rounds}:
        {wait_example}
      Then re-read peer files: {peer_files_str}
      (Round 1 needs no wait — you already read peers in step 2.)
-  b) Append your critique to {coord_dir}/{persona_name}.md under "## Debate Round N".
+  b) Append your critique to {cd}/{persona_name}.md under "## Debate Round N".
      Focus on the single strongest reason the proposal should be REJECTED from your
      lens. Be a harsh critic. Only concede if evidence from another persona is overwhelming.
-  c) Signal completion: touch {coord_dir}/{persona_name}_roundN.done
+  c) Signal completion: touch {cd}/{persona_name}_roundN.done
 
 STEP 4: FINAL VERDICT
-Append to {coord_dir}/{persona_name}.md:
+Append to {cd}/{persona_name}.md:
 ## Final Verdict
 VERDICT: ACCEPT or REJECT
 One-sentence justification.
@@ -255,7 +260,7 @@ STEP 5: DONE
 Output "PERSONA COMPLETE" as your last line.
 
 THE PROPOSAL TO EVALUATE:
-{task}
+{effective_task}
 """
         if backend == "claude":
             cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "40"]
@@ -278,7 +283,7 @@ THE PROPOSAL TO EVALUATE:
         try:
             result = _sp.run(
                 cmd, input=prompt, capture_output=True, text=True,
-                cwd=coord_dir, timeout=timeout_seconds,
+                cwd=cd, timeout=timeout_seconds,
                 env=os.environ.copy(),
             )
             stdout = result.stdout.strip()
@@ -290,7 +295,7 @@ THE PROPOSAL TO EVALUATE:
             print(f"[persona_council] {persona_name} error: {backend} not found.")
 
         # Read the persona's output file
-        eval_path = os.path.join(coord_dir, f"{persona_name}.md")
+        eval_path = os.path.join(cd, f"{persona_name}.md")
         if os.path.isfile(eval_path):
             with open(eval_path) as f:
                 eval_text = f.read()
@@ -376,6 +381,75 @@ THE PROPOSAL TO EVALUATE:
         print(f"[persona_council] Synthesis failed ({e}), using first evaluation as fallback.")
         first_eval = next(iter(evaluations.values()), f"[synthesis error: {e}]")
         proposal_text = first_eval
+
+    # ------------------------------------------------------------------
+    # Phase 4 — If 2+ rejected, re-run personas on the synthesized fix.
+    #           If 2+ reject again, return UNVIABLE with reasons.
+    # ------------------------------------------------------------------
+
+    if reject_count >= 2:
+        print(f"[persona_council] {reject_count}/3 rejected — re-running council on synthesized fix...")
+
+        # Clean coordination dir for second round
+        import shutil as _shutil
+        coord_dir_retry = coord_dir + "_retry"
+        if os.path.exists(coord_dir_retry):
+            _shutil.rmtree(coord_dir_retry)
+        os.makedirs(coord_dir_retry, exist_ok=True)
+
+        # Re-run all personas on the synthesized proposal (not the original task)
+        retry_evaluations: Dict[str, str] = {}
+        retry_verdicts: Dict[str, str] = {}
+
+        with ThreadPoolExecutor(max_workers=len(specs)) as pool:
+            futures = {
+                pool.submit(_run_persona, spec, task_override=proposal_text,
+                            coord_dir_override=coord_dir_retry): spec["persona"]
+                for spec in specs
+            }
+            try:
+                for future in as_completed(futures, timeout=timeout_seconds + 120):
+                    try:
+                        name, eval_text, verdict = future.result(timeout=timeout_seconds + 60)
+                        retry_evaluations[name] = eval_text
+                        retry_verdicts[name] = verdict
+                    except Exception as e:
+                        for f, pname in futures.items():
+                            if f is future:
+                                retry_evaluations[pname] = f"[{pname} error: {e}]"
+                                retry_verdicts[pname] = "UNKNOWN"
+                                break
+            except TimeoutError:
+                for f, pname in futures.items():
+                    if not f.done():
+                        retry_evaluations[pname] = f"[{pname} timed out]"
+                        retry_verdicts[pname] = "UNKNOWN"
+                        f.cancel()
+
+        retry_reject_count = sum(1 for v in retry_verdicts.values() if v == "REJECT")
+        print(f"[persona_council] Retry verdicts: {retry_verdicts}")
+
+        if retry_reject_count >= 2:
+            # Still rejected — return UNVIABLE with reasons
+            rejection_reasons = "\n\n".join(
+                f"**{name}** ({retry_verdicts[name]}):\n{retry_evaluations[name]}"
+                for name in retry_evaluations
+                if retry_verdicts.get(name) == "REJECT"
+            )
+            proposal_text = (
+                "## Verdict: UNVIABLE\n\n"
+                "This research direction was rejected by the persona council after "
+                "two rounds of evaluation. The synthesis agent attempted to address "
+                "the initial concerns but the revised proposal was still rejected.\n\n"
+                "## Rejection Reasons\n\n"
+                f"{rejection_reasons}"
+            )
+            verdicts = retry_verdicts
+            print(f"[persona_council] UNVIABLE — rejected on retry.")
+        else:
+            # Retry passed — use the synthesized proposal, update verdicts
+            verdicts = retry_verdicts
+            print(f"[persona_council] Retry passed — proposal accepted after revision.")
 
     # Warn about UNKNOWN verdicts
     unknown_personas = [name for name, v in verdicts.items() if v == "UNKNOWN"]
