@@ -146,7 +146,7 @@ Runs are resumable through LangGraph checkpoints (`checkpoints.db`) and can be s
 
 1. **No ground-truth verification**: The pipeline has no oracle for scientific truth. Quality gates check structural completeness (file exists, score above threshold), not factual accuracy.
 2. **Reviewer score is not calibrated**: `--min-review-score 8` means "the LLM reviewer assigned 8/10," not "this paper has an 80% chance of acceptance." The score distribution depends on the model, prompt, and paper domain.
-3. **Experiment execution has no OS-level sandboxing**: `RunExperimentTool` launches the experiment runner as a subprocess on the host (or via SLURM). There is no Docker container, cgroup, or resource-limit enforcement beyond a configurable timeout. See [Experiment Execution Safety Model](#experiment-execution-safety-model).
+3. **Experiment execution has no OS-level sandboxing**: the `run_experiment` CLI wrapper launches the experiment runner as a subprocess on the host (or via SLURM). There is no Docker container, cgroup, or resource-limit enforcement beyond a configurable timeout. See [Experiment Execution Safety Model](#experiment-execution-safety-model).
 4. **Single-run stochasticity**: The pipeline is a fixed workflow graph (stages always execute in the same order), but LLM outputs are non-deterministic. "Fixed workflow graph" refers to the execution topology, not output reproducibility.
 5. **Budget tracking is best-effort**: Invocation counts and wall-clock time are tracked internally. Actual subscription usage may differ depending on provider-side accounting.
 6. **LaTeX compilation failures**: The writeup agent generates LaTeX that may not compile on first attempt. The revision loop retries, but complex papers may require manual fixup.
@@ -1330,7 +1330,7 @@ Tree search is off by default. Enable via CLI flags:
 
 ### What IS in Place
 
-- **Subprocess isolation**: `RunExperimentTool` launches the experiment runner (`experiment_runner.py`) as a child process via `subprocess.run()`. Experiment code runs in a dedicated `experiment_runs/<uuid>/` directory, separate from the main workspace. The experiment runner implements a lightweight 4-stage loop (design, implement, execute, analyze) driven by CLI agents.
+- **Subprocess isolation**: the `run_experiment` CLI wrapper launches the experiment runner (`experiment_runner.py`) as a child process via `subprocess.run()`. Experiment code runs in a dedicated `experiment_runs/<uuid>/` directory, separate from the main workspace. The runner can dispatch either the AI-Scientist-compatible engine or the lightweight resumed CLI-stage engine.
 - **Timeout enforcement**: Local subprocess mode enforces `CONSORTIUM_EXPERIMENT_TIMEOUT` (default: 3600 seconds). If the experiment exceeds this, the subprocess is killed.
 - **SLURM mode** (when `CONSORTIUM_SLURM_ENABLED=1`): Experiments are submitted as SLURM batch jobs with configurable partition, time limit, GPU allocation, and memory. SLURM's own resource enforcement applies.
 - **Budget cap**: The overall invocation limit prevents unbounded CLI agent usage during experiments.

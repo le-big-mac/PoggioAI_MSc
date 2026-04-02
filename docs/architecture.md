@@ -173,7 +173,7 @@ consortium/
 ├── toolkits/           Tool implementations grouped by domain
 │   ├── search/         ArXiv, web search, text inspector
 │   ├── ideation/       Idea generation, novelty check
-│   ├── experimentation/  RunExperimentTool, standardization
+│   ├── experimentation/  experiment-run wrappers and helpers
 │   ├── math/           ClaimGraph, ProofWorkspace, rigor/numerical checkers
 │   ├── writeup/        LaTeX generator/compiler, citations, figures
 │   └── filesystem/     File I/O, KB indexing
