@@ -215,6 +215,40 @@ def build_task_with_feedback(idea: str, feedback: str, prior_plan_path: str | No
     return "\n".join(parts)
 
 
+def _normalize_seen(seen: dict | None) -> dict:
+    data = dict(seen or {})
+    data.setdefault("issues", [])
+    data.setdefault("comments", {})
+    data.setdefault("workspaces", {})
+    return data
+
+
+def _remember_workspace(state_path: str, issue_number: int, workspace: str | None) -> None:
+    if not workspace:
+        return
+    seen = _load_seen(state_path)
+    seen["workspaces"][str(issue_number)] = workspace
+    _save_seen(state_path, seen)
+
+
+def _find_prior_plan_artifact(workspace: str | None) -> str | None:
+    if not workspace:
+        return None
+
+    for rel_path in [
+        "final_paper.md",
+        "final_paper.tex",
+        os.path.join("paper_workspace", "final_paper.md"),
+        os.path.join("paper_workspace", "final_paper.tex"),
+        os.path.join("paper_workspace", "research_plan.tex"),
+        os.path.join("paper_workspace", "research_plan.md"),
+    ]:
+        candidate = os.path.join(workspace, rel_path)
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
@@ -300,7 +334,7 @@ def _publish_and_comment(
     return url_path
 
 
-def handle_new_issue(repo: str, issue: dict) -> None:
+def handle_new_issue(repo: str, issue: dict, state_path: str) -> None:
     """Handle a new issue labeled 'idea': run quick pass."""
     number = issue["number"]
     idea = f"{issue['title']}\n\n{issue.get('body', '') or ''}".strip()
@@ -314,13 +348,21 @@ def handle_new_issue(repo: str, issue: dict) -> None:
 
     if exit_code == 0:
         add_label(repo, number, "assessed")
+        _remember_workspace(state_path, number, workspace)
     else:
         add_label(repo, number, "failed")
 
     _publish_and_comment(repo, number, workspace, "plan", exit_code)
 
 
-def handle_command(repo: str, issue: dict, command: str, modifiers: list[str], feedback: str) -> None:
+def handle_command(
+    repo: str,
+    issue: dict,
+    command: str,
+    modifiers: list[str],
+    feedback: str,
+    state_path: str,
+) -> None:
     """Handle a command on an existing issue."""
     number = issue["number"]
     idea = f"{issue['title']}\n\n{issue.get('body', '') or ''}".strip()
@@ -333,13 +375,8 @@ def handle_command(repo: str, issue: dict, command: str, modifiers: list[str], f
     # Find prior workspace for context (if re-running plan)
     prior_plan = None
     if command == "plan":
-        results_dir = os.path.join(_REPO_ROOT, "results")
-        if os.path.isdir(results_dir):
-            for d in sorted(os.listdir(results_dir), reverse=True):
-                fp = os.path.join(results_dir, d, "final_paper.md")
-                if os.path.isfile(fp):
-                    prior_plan = fp
-                    break
+        prior_workspace = _load_seen(state_path).get("workspaces", {}).get(str(number))
+        prior_plan = _find_prior_plan_artifact(prior_workspace)
 
     task = build_task_with_feedback(idea, feedback, prior_plan)
     pipeline_args = _pipeline_args_for_command(command, modifiers)
@@ -358,6 +395,8 @@ def handle_command(repo: str, issue: dict, command: str, modifiers: list[str], f
 
     if exit_code == 0 and command != "plan":
         add_label(repo, number, "completed")
+    if exit_code == 0:
+        _remember_workspace(state_path, number, workspace)
 
     _publish_and_comment(repo, number, workspace, command, exit_code)
 
@@ -370,13 +409,13 @@ def _load_seen(state_path: str) -> dict:
     """Load seen issues/comments state."""
     if os.path.isfile(state_path):
         with open(state_path) as f:
-            return json.load(f)
-    return {"issues": [], "comments": {}}
+            return _normalize_seen(json.load(f))
+    return _normalize_seen({})
 
 
 def _save_seen(state_path: str, seen: dict) -> None:
     with open(state_path, "w") as f:
-        json.dump(seen, f, indent=2)
+        json.dump(_normalize_seen(seen), f, indent=2)
 
 
 def poll_once(repo: str, state_path: str) -> bool:
@@ -398,7 +437,7 @@ def poll_once(repo: str, state_path: str) -> bool:
             seen["issues"] = list(seen_issues)
             _save_seen(state_path, seen)
 
-            handle_new_issue(repo, issue)
+            handle_new_issue(repo, issue, state_path)
             did_work = True
             # Refresh seen state after handling (in case of crash/restart)
             seen = _load_seen(state_path)
@@ -423,7 +462,7 @@ def poll_once(repo: str, state_path: str) -> bool:
         for comment in new_comments:
             command, modifiers, feedback = parse_command(comment.get("body", ""))
             if command:
-                handle_command(repo, issue, command, modifiers, feedback)
+                handle_command(repo, issue, command, modifiers, feedback, state_path)
                 did_work = True
                 # Only handle one command per poll to avoid overload
                 return True
