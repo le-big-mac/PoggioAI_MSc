@@ -47,7 +47,7 @@ def _model_to_backend(model_id: str) -> str:
 # Default counsel specs — one per CLI backend for diverse perspectives.
 DEFAULT_COUNSEL_SPECS = [
     {"model": "claude-opus-4-6", "backend": "claude"},
-    {"model": "gpt-5.4", "backend": "codex"},
+    {"model": "gemini-3.1-pro-preview", "backend": "gemini"},
     {"model": "gemini-3.1-pro-preview", "backend": "gemini"},
 ]
 
