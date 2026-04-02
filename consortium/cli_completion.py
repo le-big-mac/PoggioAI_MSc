@@ -75,16 +75,25 @@ def cli_completion(
             cmd = ["gemini", "--approval-mode", "yolo"]
             if model:
                 cmd.extend(["--model", model])
-            if resume and session_id:
-                cmd.extend(["--resume", session_id])
+            if resume:
+                # Gemini uses index-based resume, not UUIDs
+                cmd.extend(["--resume", "latest"])
 
         else:
             return f"[cli_completion error: unknown backend {backend!r}]"
 
-        result = subprocess.run(
-            cmd, input=full_prompt, capture_output=True, text=True,
-            timeout=timeout, env=os.environ.copy(),
-        )
+        # Merge stderr into stdout for codex (session ID is in stderr)
+        if backend == "codex":
+            result = subprocess.run(
+                cmd, input=full_prompt, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True,
+                timeout=timeout, env=os.environ.copy(),
+            )
+        else:
+            result = subprocess.run(
+                cmd, input=full_prompt, capture_output=True, text=True,
+                timeout=timeout, env=os.environ.copy(),
+            )
 
     except subprocess.TimeoutExpired:
         elapsed = time.time() - t0
@@ -99,8 +108,8 @@ def cli_completion(
     elapsed = time.time() - t0
 
     if result.returncode != 0:
-        stderr_snippet = (result.stderr or "")[:500]
-        msg = f"[cli_completion error (rc={result.returncode}): {stderr_snippet}]"
+        error_text = (result.stderr or result.stdout or "")[:500]
+        msg = f"[cli_completion error (rc={result.returncode}): {error_text}]"
         logger.warning(msg)
         return msg
 
@@ -129,9 +138,9 @@ def cli_completion(
     return output
 
 
-def extract_session_id(stdout: str) -> Optional[str]:
-    """Extract session ID from codex CLI output."""
-    for line in stdout.splitlines():
+def extract_session_id(output: str) -> Optional[str]:
+    """Extract session ID from CLI output."""
+    for line in output.splitlines():
         if "session id:" in line.lower():
             return line.split(":")[-1].strip()
     return None
