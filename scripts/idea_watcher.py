@@ -167,6 +167,7 @@ def _parse_workspace_from_output(line: str) -> str | None:
 def launch_pipeline(
     task: str,
     extra_args: list[str] | None = None,
+    on_workspace=None,
 ) -> tuple[int, str | None]:
     """Launch a consortium pipeline run. Returns (exit_code, workspace_path)."""
     cmd = [
@@ -192,10 +193,11 @@ def launch_pipeline(
             ws = _parse_workspace_from_output(line)
             if ws:
                 workspace = ws
+                if workspace and not os.path.isabs(workspace):
+                    workspace = os.path.join(_REPO_ROOT, workspace)
+                if on_workspace is not None:
+                    on_workspace(workspace)
     proc.wait()
-
-    if workspace and not os.path.isabs(workspace):
-        workspace = os.path.join(_REPO_ROOT, workspace)
 
     return proc.returncode, workspace
 
@@ -229,6 +231,74 @@ def _remember_workspace(state_path: str, issue_number: int, workspace: str | Non
     seen = _load_seen(state_path)
     seen["workspaces"][str(issue_number)] = workspace
     _save_seen(state_path, seen)
+
+
+def _artifact_group_exists(workspace: str, group) -> bool:
+    if isinstance(group, str):
+        return os.path.exists(os.path.join(workspace, group))
+    return all(os.path.exists(os.path.join(workspace, rel_path)) for rel_path in group)
+
+
+def _stage_marker_exists(workspace: str, markers: list) -> bool:
+    return any(_artifact_group_exists(workspace, marker) for marker in markers)
+
+
+_QUICK_STAGE_MARKERS = [
+    ("persona_council", ["paper_workspace/research_proposal.md"]),
+    ("literature_review_agent", [["paper_workspace/literature_review.tex", "paper_workspace/novelty_flags.json"]]),
+    ("brainstorm_agent", ["paper_workspace/brainstorm.json"]),
+    ("formalize_goals_agent", [["paper_workspace/research_goals.json", "paper_workspace/track_decomposition.json"]]),
+    ("research_plan_writeup_agent", ["paper_workspace/research_plan.tex", "paper_workspace/research_plan.md"]),
+    ("quick_verdict", ["quick_pass_verdict.json", "final_paper.tex"]),
+]
+
+_FULL_PRETRACK_STAGE_MARKERS = [
+    ("persona_council", ["paper_workspace/research_proposal.md"]),
+    ("literature_review_agent", [["paper_workspace/literature_review.tex", "paper_workspace/novelty_flags.json"]]),
+    ("brainstorm_agent", ["paper_workspace/brainstorm.json"]),
+    ("formalize_goals_agent", [["paper_workspace/research_goals.json", "paper_workspace/track_decomposition.json"]]),
+    ("research_plan_writeup_agent", ["paper_workspace/research_plan.tex", "paper_workspace/research_plan.md"]),
+]
+
+_THEORY_STAGE_MARKERS = [
+    ("math_literature_agent", ["math_workspace/literature_lemma_notes.md", "math_workspace/lemma_library.md"]),
+    ("math_proposer_agent", ["math_workspace/claim_graph.json"]),
+    ("proof_transcription_agent", ["paper_workspace/theory_sections.tex"]),
+]
+
+_EXPERIMENT_STAGE_MARKERS = [
+    ("experiment_literature_agent", [["experiment_workspace/experiment_baselines.json", "experiment_workspace/literature_handoff.md"]]),
+    ("experiment_design_agent", ["experiment_workspace/experiment_design.json"]),
+    ("experimentation_agent", ["experiment_workspace/execution_log.json"]),
+    ("experiment_transcription_agent", ["paper_workspace/experiment_report.tex"]),
+]
+
+_POST_STAGE_MARKERS = [
+    ("writeup_agent", ["final_paper.tex", "paper_workspace/final_paper.tex"]),
+    ("proofreading_agent", ["paper_workspace/copyedit_report.tex"]),
+    ("reviewer_agent", ["paper_workspace/review_report.tex"]),
+]
+
+
+def _infer_resume_stage(command: str, workspace: str | None) -> str | None:
+    if not workspace or not os.path.isdir(workspace):
+        return None
+
+    if command == "plan":
+        stage_markers = _QUICK_STAGE_MARKERS
+    elif command == "experiment":
+        stage_markers = _FULL_PRETRACK_STAGE_MARKERS + _EXPERIMENT_STAGE_MARKERS + _POST_STAGE_MARKERS
+    elif command == "theory":
+        stage_markers = _FULL_PRETRACK_STAGE_MARKERS + _THEORY_STAGE_MARKERS + _POST_STAGE_MARKERS
+    elif command == "run":
+        stage_markers = _FULL_PRETRACK_STAGE_MARKERS + _THEORY_STAGE_MARKERS + _EXPERIMENT_STAGE_MARKERS + _POST_STAGE_MARKERS
+    else:
+        return None
+
+    for stage_name, markers in stage_markers:
+        if not _stage_marker_exists(workspace, markers):
+            return stage_name
+    return None
 
 
 def _find_prior_plan_artifact(workspace: str | None) -> str | None:
@@ -285,7 +355,7 @@ def _build_launch_args(
     prior_workspace: str | None,
 ) -> list[str]:
     args = _pipeline_args_for_command(command, modifiers)
-    resume_stage = _resume_stage_for_command(command)
+    resume_stage = _infer_resume_stage(command, prior_workspace) or _resume_stage_for_command(command)
     if prior_workspace and resume_stage:
         args.extend(["--resume", prior_workspace, "--start-from-stage", resume_stage])
     return args
@@ -369,7 +439,11 @@ def handle_new_issue(repo: str, issue: dict, state_path: str) -> None:
     add_label(repo, number, "running")
     add_comment(repo, number, "Starting quick assessment... I'll comment here when results are ready.")
 
-    exit_code, workspace = launch_pipeline(idea, ["--quick-pass"])
+    exit_code, workspace = launch_pipeline(
+        idea,
+        ["--quick-pass"],
+        on_workspace=lambda ws: _remember_workspace(state_path, number, ws),
+    )
     remove_label(repo, number, "running")
 
     if exit_code == 0:
@@ -377,6 +451,7 @@ def handle_new_issue(repo: str, issue: dict, state_path: str) -> None:
         _remember_workspace(state_path, number, workspace)
     else:
         add_label(repo, number, "failed")
+        _remember_workspace(state_path, number, workspace)
 
     _publish_and_comment(repo, number, workspace, "plan", exit_code)
 
@@ -418,13 +493,16 @@ def handle_command(
     add_comment(repo, number, msg)
     add_label(repo, number, "running")
 
-    exit_code, workspace = launch_pipeline(task, pipeline_args)
+    exit_code, workspace = launch_pipeline(
+        task,
+        pipeline_args,
+        on_workspace=lambda ws: _remember_workspace(state_path, number, ws),
+    )
     remove_label(repo, number, "running")
 
     if exit_code == 0 and command != "plan":
         add_label(repo, number, "completed")
-    if exit_code == 0:
-        _remember_workspace(state_path, number, workspace)
+    _remember_workspace(state_path, number, workspace)
 
     _publish_and_comment(repo, number, workspace, command, exit_code)
 

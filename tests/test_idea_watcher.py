@@ -55,7 +55,11 @@ def test_handle_command_plan_uses_issue_local_workspace(tmp_path, monkeypatch):
 
     monkeypatch.setattr(idea_watcher, "build_task_with_feedback", fake_build_task_with_feedback)
     monkeypatch.setattr(idea_watcher, "_pipeline_args_for_command", lambda command, modifiers: ["--quick-pass"])
-    monkeypatch.setattr(idea_watcher, "launch_pipeline", lambda task, args: (0, str(tmp_path / "new_run")))
+    monkeypatch.setattr(
+        idea_watcher,
+        "launch_pipeline",
+        lambda task, args, on_workspace=None: (0, str(tmp_path / "new_run")),
+    )
     monkeypatch.setattr(idea_watcher, "add_comment", lambda *args, **kwargs: None)
     monkeypatch.setattr(idea_watcher, "add_label", lambda *args, **kwargs: None)
     monkeypatch.setattr(idea_watcher, "remove_label", lambda *args, **kwargs: None)
@@ -72,7 +76,11 @@ def test_handle_new_issue_records_workspace_on_success(tmp_path, monkeypatch):
     idea_watcher._save_seen(str(state_path), {"issues": [9], "comments": {}, "workspaces": {}})
     workspace = tmp_path / "workspace_9"
 
-    monkeypatch.setattr(idea_watcher, "launch_pipeline", lambda task, args: (0, str(workspace)))
+    monkeypatch.setattr(
+        idea_watcher,
+        "launch_pipeline",
+        lambda task, args, on_workspace=None: (0, str(workspace)),
+    )
     monkeypatch.setattr(idea_watcher, "add_label", lambda *args, **kwargs: None)
     monkeypatch.setattr(idea_watcher, "remove_label", lambda *args, **kwargs: None)
     monkeypatch.setattr(idea_watcher, "add_comment", lambda *args, **kwargs: None)
@@ -83,6 +91,29 @@ def test_handle_new_issue_records_workspace_on_success(tmp_path, monkeypatch):
 
     seen = idea_watcher._load_seen(str(state_path))
     assert seen["workspaces"]["9"] == str(workspace)
+
+
+def test_handle_new_issue_records_workspace_on_failure_if_announced(tmp_path, monkeypatch):
+    state_path = tmp_path / "watcher_state.json"
+    idea_watcher._save_seen(str(state_path), {"issues": [10], "comments": {}, "workspaces": {}})
+    workspace = tmp_path / "workspace_10"
+
+    def fake_launch_pipeline(task, args, on_workspace=None):
+        if on_workspace is not None:
+            on_workspace(str(workspace))
+        return 1, str(workspace)
+
+    monkeypatch.setattr(idea_watcher, "launch_pipeline", fake_launch_pipeline)
+    monkeypatch.setattr(idea_watcher, "add_label", lambda *args, **kwargs: None)
+    monkeypatch.setattr(idea_watcher, "remove_label", lambda *args, **kwargs: None)
+    monkeypatch.setattr(idea_watcher, "add_comment", lambda *args, **kwargs: None)
+    monkeypatch.setattr(idea_watcher, "_publish_and_comment", lambda *args, **kwargs: None)
+
+    issue = {"number": 10, "title": "New idea", "body": ""}
+    idea_watcher.handle_new_issue("owner/repo", issue, str(state_path))
+
+    seen = idea_watcher._load_seen(str(state_path))
+    assert seen["workspaces"]["10"] == str(workspace)
 
 
 def test_build_launch_args_resume_full_run_from_issue_workspace():
@@ -129,3 +160,14 @@ def test_build_launch_args_resume_experiment_run_stays_non_math():
         "--start-from-stage",
         "experiment_literature_agent",
     ]
+
+
+def test_infer_resume_stage_for_failed_quick_pass_after_persona(tmp_path):
+    workspace = tmp_path / "run"
+    paper_ws = workspace / "paper_workspace"
+    paper_ws.mkdir(parents=True)
+    (paper_ws / "research_proposal.md").write_text("proposal")
+
+    stage = idea_watcher._infer_resume_stage("plan", str(workspace))
+
+    assert stage == "literature_review_agent"
