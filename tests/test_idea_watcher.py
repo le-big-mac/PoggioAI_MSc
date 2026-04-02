@@ -83,3 +83,33 @@ def test_handle_new_issue_records_workspace_on_success(tmp_path, monkeypatch):
 
     seen = idea_watcher._load_seen(str(state_path))
     assert seen["workspaces"]["9"] == str(workspace)
+
+
+def test_build_launch_args_resume_full_run_from_issue_workspace():
+    args = idea_watcher._build_launch_args("run", ["counsel"], "/tmp/existing_workspace")
+
+    assert args == [
+        "--enable-counsel",
+        "--resume",
+        "/tmp/existing_workspace",
+        "--start-from-stage",
+        "experiment_literature_agent",
+    ]
+
+
+def test_build_launch_args_resume_theory_run_enables_math():
+    args = idea_watcher._build_launch_args("theory", [], "/tmp/existing_workspace")
+
+    assert args == [
+        "--enable-math-agents",
+        "--resume",
+        "/tmp/existing_workspace",
+        "--start-from-stage",
+        "math_literature_agent",
+    ]
+
+
+def test_build_launch_args_falls_back_to_fresh_run_without_workspace():
+    args = idea_watcher._build_launch_args("run", [], None)
+
+    assert args == []

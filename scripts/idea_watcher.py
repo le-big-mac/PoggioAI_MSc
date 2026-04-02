@@ -265,6 +265,26 @@ def _pipeline_args_for_command(command: str, modifiers: list[str]) -> list[str]:
     return args
 
 
+def _resume_stage_for_command(command: str) -> str | None:
+    if command in {"run", "experiment"}:
+        return "experiment_literature_agent"
+    if command == "theory":
+        return "math_literature_agent"
+    return None
+
+
+def _build_launch_args(
+    command: str,
+    modifiers: list[str],
+    prior_workspace: str | None,
+) -> list[str]:
+    args = _pipeline_args_for_command(command, modifiers)
+    resume_stage = _resume_stage_for_command(command)
+    if prior_workspace and resume_stage:
+        args.extend(["--resume", prior_workspace, "--start-from-stage", resume_stage])
+    return args
+
+
 def _publish_and_comment(
     repo: str,
     issue_number: int,
@@ -374,17 +394,19 @@ def handle_command(
 
     # Find prior workspace for context (if re-running plan)
     prior_plan = None
+    prior_workspace = _load_seen(state_path).get("workspaces", {}).get(str(number))
     if command == "plan":
-        prior_workspace = _load_seen(state_path).get("workspaces", {}).get(str(number))
         prior_plan = _find_prior_plan_artifact(prior_workspace)
 
     task = build_task_with_feedback(idea, feedback, prior_plan)
-    pipeline_args = _pipeline_args_for_command(command, modifiers)
+    pipeline_args = _build_launch_args(command, modifiers, prior_workspace)
 
     mode = {"plan": "quick assessment", "run": "full analysis",
             "experiment": "experiment analysis", "theory": "theory analysis"}.get(command, "analysis")
     mod_str = f" ({', '.join(modifiers)})" if modifiers else ""
     msg = f"Starting {mode}{mod_str}..."
+    if prior_workspace and command in {"run", "experiment", "theory"}:
+        msg += f"\n\nResuming workspace:\n`{prior_workspace}`"
     if feedback:
         msg += f"\n\nFeedback noted:\n> {feedback[:500]}"
     add_comment(repo, number, msg)
