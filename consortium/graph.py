@@ -344,45 +344,45 @@ the LaTeX errors and try again.
             model = spec.model
 
         print(f"[quick_verdict] Composing proposal document via {backend}...")
-        try:
-            run = run_cli_agent_subprocess(
-                cli_backend=backend,
-                prompt=compose_prompt,
-                workspace_dir=workspace_dir,
-                agent_name="quick_verdict",
-                model=model,
-                timeout_seconds=600,
-                allowed_tools=[
-                    "Read",
-                    "Write",
-                    "Edit",
-                    "WebFetch",
-                    "WebSearch",
-                    "Bash(tectonic*)",
-                    "Bash(cat*)",
-                    "Bash(ls*)",
-                    "Bash(curl*)",
-                    "Grep",
-                    "Glob",
-                ],
+        run = run_cli_agent_subprocess(
+            cli_backend=backend,
+            prompt=compose_prompt,
+            workspace_dir=workspace_dir,
+            agent_name="quick_verdict",
+            model=model,
+            timeout_seconds=600,
+            allowed_tools=[
+                "Read",
+                "Write",
+                "Edit",
+                "WebFetch",
+                "WebSearch",
+                "Bash(tectonic*)",
+                "Bash(cat*)",
+                "Bash(ls*)",
+                "Bash(curl*)",
+                "Grep",
+                "Glob",
+            ],
+        )
+        result = run["result"]
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"[quick_verdict] Agent failed (rc={result.returncode}): "
+                f"{(result.stderr or '')[:500]}"
             )
-            result = run["result"]
-            if result.returncode != 0:
-                print(f"[quick_verdict] Agent returned code {result.returncode}: {(result.stderr or '')[:300]}")
-        except subprocess.TimeoutExpired:
-            print("[quick_verdict] Proposal composition timed out (600s)")
-        except FileNotFoundError:
-            print(f"[quick_verdict] CLI tool '{backend}' not found on PATH")
 
-        # Check results
-        pdf_path = os.path.join(workspace_dir, "final_paper.pdf")
         tex_path = os.path.join(workspace_dir, "final_paper.tex")
+        if not os.path.isfile(tex_path):
+            raise RuntimeError(
+                "[quick_verdict] Agent completed but did not produce final_paper.tex"
+            )
+
+        pdf_path = os.path.join(workspace_dir, "final_paper.pdf")
         if os.path.isfile(pdf_path):
             print(f"[quick_verdict] PDF ready: {pdf_path}")
-        elif os.path.isfile(tex_path):
-            print(f"[quick_verdict] .tex written but PDF compilation may have failed")
         else:
-            print("[quick_verdict] No output produced — check agent logs")
+            print(f"[quick_verdict] .tex written but PDF compilation failed")
 
         return {"finished": True}
 
