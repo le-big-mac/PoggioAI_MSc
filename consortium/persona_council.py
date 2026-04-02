@@ -359,24 +359,27 @@ THE PROPOSAL TO EVALUATE:
     accept_count = sum(1 for v in verdicts.values() if v == "ACCEPT")
     reject_count = sum(1 for v in verdicts.values() if v == "REJECT")
 
-    formatted_evals = "\n\n".join(
-        f"=== {name} (verdict: {verdicts.get(name, 'UNKNOWN')}) ===\n{text}"
-        for name, text in evaluations.items()
-    )
+    persona_files = " ".join(f"{coord_dir}/{name}.md" for name in evaluations)
 
     synthesis_input = (
         f"VERDICT SUMMARY: {verdict_summary} "
         f"({accept_count} ACCEPT, {reject_count} REJECT)\n\n"
-        f"Original task:\n{task}\n\n"
-        f"Persona evaluations and debate:\n\n{formatted_evals}"
+        f"Read the persona evaluations and debate from these files:\n{persona_files}\n\n"
+        f"Write your synthesized proposal to: {coord_dir}/synthesis.md"
     )
 
     try:
-        proposal_text = cli_completion(
+        cli_completion(
             synthesis_input,
             system_prompt=synthesis_prompt_override or PERSONA_SYNTHESIS_PROMPT,
             backend=_model_to_backend(synthesis_model),
-        ) or ""
+        )
+        synthesis_path = os.path.join(coord_dir, "synthesis.md")
+        if os.path.isfile(synthesis_path):
+            with open(synthesis_path) as f:
+                proposal_text = f.read()
+        else:
+            raise RuntimeError("Synthesis agent did not write synthesis.md")
     except Exception as e:
         print(f"[persona_council] Synthesis failed ({e}), using first evaluation as fallback.")
         first_eval = next(iter(evaluations.values()), f"[synthesis error: {e}]")
@@ -464,23 +467,26 @@ THE PROPOSAL TO EVALUATE:
         else:
             # Retry passed — re-synthesize incorporating retry feedback
             verdicts = retry_verdicts
-            retry_formatted = "\n\n".join(
-                f"=== {name} (verdict: {retry_verdicts.get(name, 'UNKNOWN')}) ===\n{text}"
-                for name, text in retry_evaluations.items()
-            )
+            retry_persona_files = " ".join(f"{coord_dir_retry}/{name}.md" for name in retry_evaluations)
             retry_accept = sum(1 for v in retry_verdicts.values() if v == "ACCEPT")
             retry_synthesis_input = (
                 f"VERDICT SUMMARY (RETRY): {retry_accept} ACCEPT, {retry_reject_count} REJECT\n\n"
-                f"Original proposal (pre-fix):\n{task}\n\n"
-                f"First synthesis (the fix attempt):\n{proposal_text}\n\n"
-                f"Retry evaluations:\n\n{retry_formatted}"
+                f"Read the first synthesis from: {coord_dir}/synthesis.md\n"
+                f"Read the retry persona evaluations from: {retry_persona_files}\n\n"
+                f"Write your revised proposal to: {coord_dir_retry}/synthesis.md"
             )
             try:
-                proposal_text = cli_completion(
+                cli_completion(
                     retry_synthesis_input,
                     system_prompt=synthesis_prompt_override or PERSONA_SYNTHESIS_PROMPT,
                     backend=_model_to_backend(synthesis_model),
-                ) or proposal_text
+                )
+                retry_synthesis_path = os.path.join(coord_dir_retry, "synthesis.md")
+                if os.path.isfile(retry_synthesis_path):
+                    with open(retry_synthesis_path) as f:
+                        proposal_text = f.read()
+                else:
+                    print("[persona_council] Retry synthesis didn't write file, keeping first synthesis.")
             except Exception as e:
                 print(f"[persona_council] Retry synthesis failed ({e}), keeping first synthesis.")
             print("[persona_council] Retry passed — re-synthesized with retry feedback.")
