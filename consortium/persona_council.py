@@ -197,11 +197,10 @@ def run_persona_council(
                   resume: bool = False) -> str:
         """Run a CLI call, optionally resuming a session. Returns stdout."""
         if backend == "claude":
-            cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "20"]
+            cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "5"]
             if model:
                 cmd.extend(["--model", model])
-            cmd.extend(["--allowedTools",
-                         "Read,Write,Edit,WebFetch,WebSearch,Bash(cat*),Bash(ls*),Glob,Grep"])
+            cmd.extend(["--allowedTools", "WebFetch,WebSearch"])
             if resume:
                 cmd.extend(["--resume", session_id])
             else:
@@ -281,12 +280,10 @@ def run_persona_council(
 
 You are {p['name']} in a multi-persona research council.
 
-Evaluate this research proposal from your lens. Write your evaluation
-(assessment, strengths, critical gaps, and verdict ACCEPT or REJECT) to:
-  {coord_dir}/{p['name']}.md
+Evaluate this research proposal from your lens. Provide your evaluation
+with: assessment, strengths, critical gaps, and verdict.
 
-End your evaluation with:
-VERDICT: ACCEPT or REJECT
+End with: VERDICT: ACCEPT or REJECT
 
 THE PROPOSAL:
 {task}
@@ -297,6 +294,12 @@ THE PROPOSAL:
             real_sid = _extract_session_id(stdout, p["backend"])
             if real_sid:
                 p["session_id"] = real_sid
+
+        # Orchestrator writes the eval to file (don't rely on agent to do it)
+        eval_path = os.path.join(coord_dir, f"{p['name']}.md")
+        with open(eval_path, "w") as f:
+            f.write(stdout)
+
         return p["name"], stdout
 
     print("[persona_council] Phase 1 — evaluations...")
@@ -310,12 +313,6 @@ THE PROPOSAL:
             except Exception as e:
                 print(f"[persona_council] {name} eval failed: {e}")
 
-    # Verify all eval files exist
-    eval_files = [os.path.join(coord_dir, f"{p['name']}.md") for p in personas]
-    for ef in eval_files:
-        if not os.path.isfile(ef):
-            raise RuntimeError(f"Persona did not write eval: {ef}")
-
     # ------------------------------------------------------------------
     # Phase 2: Debate rounds (resume sessions, orchestrator controls timing)
     # ------------------------------------------------------------------
@@ -324,21 +321,31 @@ THE PROPOSAL:
         print(f"[persona_council] Phase 2 — debate round {rnd}/{max_debate_rounds}...")
 
         def _debate_round(p: Dict, round_num: int) -> str:
-            peers = [x["name"] for x in personas if x["name"] != p["name"]]
-            peer_files = " ".join(f"{coord_dir}/{peer}.md" for peer in peers)
+            # Orchestrator reads peer files and passes content in prompt
+            peer_content = ""
+            for other in personas:
+                if other["name"] != p["name"]:
+                    path = os.path.join(coord_dir, f"{other['name']}.md")
+                    if os.path.isfile(path):
+                        with open(path) as f:
+                            peer_content += f"\n=== {other['name']} ===\n{f.read()}\n"
 
             prompt = (
                 f"DEBATE ROUND {round_num}.\n\n"
-                f"Read the other personas' latest evaluations from: {peer_files}\n\n"
-                f"Write your round {round_num} critique — append it to "
-                f"{coord_dir}/{p['name']}.md under '## Debate Round {round_num}'.\n"
-                f"Focus on the single strongest reason the proposal should be REJECTED "
-                f"from your lens. Be a harsh critic. Only concede if evidence from "
-                f"another persona is overwhelming.\n\n"
-                f"After writing your critique, update your verdict at the end of your "
-                f"file under '## Final Verdict' with VERDICT: ACCEPT or REJECT."
+                f"Here are the other personas' latest evaluations and critiques:\n"
+                f"{peer_content}\n\n"
+                f"Write your round {round_num} critique. Focus on the single strongest "
+                f"reason the proposal should be REJECTED from your lens. Be a harsh "
+                f"critic. Only concede if evidence from another persona is overwhelming.\n\n"
+                f"End with: VERDICT: ACCEPT or REJECT"
             )
-            return _cli_call(p["backend"], p["model"], prompt, p["session_id"], resume=True)
+            stdout = _cli_call(p["backend"], p["model"], prompt, p["session_id"], resume=True)
+
+            # Orchestrator appends the critique to the persona's file
+            with open(os.path.join(coord_dir, f"{p['name']}.md"), "a") as f:
+                f.write(f"\n\n## Debate Round {round_num}\n{stdout}\n")
+
+            return stdout
 
         with ThreadPoolExecutor(max_workers=len(personas)) as pool:
             futures = {pool.submit(_debate_round, p, rnd): p["name"] for p in personas}
@@ -401,21 +408,20 @@ THE PROPOSAL:
 
         # Resume each persona with the synthesis, ask to re-evaluate
         def _retry_persona(p: Dict) -> Tuple[str, str, str]:
-            retry_path = os.path.join(coord_dir, f"{p['name']}_retry.md")
             prompt = (
                 f"The synthesis coordinator has revised the proposal based on all "
                 f"three personas' feedback. Here is the revised proposal:\n\n"
                 f"{proposal_text}\n\n"
                 f"Re-evaluate this revised proposal from your persona's lens.\n"
-                f"Write your re-evaluation to: {retry_path}\n"
                 f"End with VERDICT: ACCEPT or REJECT"
             )
-            _cli_call(p["backend"], p["model"], prompt, p["session_id"], resume=True)
-            if os.path.isfile(retry_path):
-                with open(retry_path) as f:
-                    text = f.read()
-            else:
-                text = f"[{p['name']} did not write retry evaluation]"
+            stdout = _cli_call(p["backend"], p["model"], prompt, p["session_id"], resume=True)
+
+            # Orchestrator writes the retry eval
+            retry_path = os.path.join(coord_dir, f"{p['name']}_retry.md")
+            with open(retry_path, "w") as f:
+                f.write(stdout)
+            text = stdout
             return p["name"], text, _extract_verdict(text)
 
         retry_verdicts: Dict[str, str] = {}
