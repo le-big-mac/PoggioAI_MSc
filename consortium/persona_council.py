@@ -39,6 +39,9 @@ from .prompts.duality_check_instructions import (
     DUALITY_CHECK_B_PROMPT,
 )
 
+# extract_session_id no longer imported — cli_completion handles
+# codex session ID extraction internally via metadata dict.
+
 
 # ---------------------------------------------------------------------------
 # Default persona model specs
@@ -187,8 +190,6 @@ def run_persona_council(
         coord_dir = tempfile.mkdtemp(prefix="persona_council_")
     os.makedirs(coord_dir, exist_ok=True)
 
-    from .cli_completion import extract_session_id
-
     # ------------------------------------------------------------------
     # Setup: assign session IDs and backends
     # ------------------------------------------------------------------
@@ -229,12 +230,11 @@ End with: VERDICT: ACCEPT or REJECT
 THE PROPOSAL:
 {task}
 """
-        stdout = cli_completion(prompt, backend=p["backend"], model=p["model"], session_id=p["session_id"], timeout=timeout_seconds, allow_web=True)
-        # For codex, extract the real session ID from output
-        if p["backend"] == "codex":
-            real_sid = extract_session_id(stdout)
-            if real_sid:
-                p["session_id"] = real_sid
+        meta: Dict[str, Any] = {}
+        stdout = cli_completion(prompt, backend=p["backend"], model=p["model"], session_id=p["session_id"], timeout=timeout_seconds, allow_web=True, metadata=meta)
+        # For codex, cli_completion extracts the real session ID from stderr
+        if "session_id" in meta:
+            p["session_id"] = meta["session_id"]
 
         # Orchestrator writes the eval to file (don't rely on agent to do it)
         eval_path = os.path.join(coord_dir, f"{p['name']}.md")
@@ -330,15 +330,17 @@ THE PROPOSAL:
         f"Persona evaluations and debate:\n\n{formatted_evals}"
     )
 
-    try:
-        proposal_text = cli_completion(
-            synthesis_input,
-            system_prompt=synthesis_prompt_override or PERSONA_SYNTHESIS_PROMPT,
-            backend=_model_to_backend(synthesis_model),
-        ) or ""
-    except Exception as e:
-        print(f"[persona_council] Synthesis failed: {e}")
-        proposal_text = next(iter(evaluations.values()), "")
+    proposal_text = cli_completion(
+        synthesis_input,
+        system_prompt=synthesis_prompt_override or PERSONA_SYNTHESIS_PROMPT,
+        backend=_model_to_backend(synthesis_model),
+    )
+
+    # Save post-debate verdicts and synthesis
+    with open(os.path.join(coord_dir, "verdicts_post_debate.json"), "w") as f:
+        json.dump(verdicts, f, indent=2)
+    with open(os.path.join(coord_dir, "synthesis.md"), "w") as f:
+        f.write(proposal_text)
 
     # ------------------------------------------------------------------
     # Phase 4: Handle rejections (same sessions for retry)
@@ -383,6 +385,9 @@ THE PROPOSAL:
 
         retry_reject_count = sum(1 for v in retry_verdicts.values() if v == "REJECT")
 
+        with open(os.path.join(coord_dir, "verdicts_retry.json"), "w") as f:
+            json.dump(retry_verdicts, f, indent=2)
+
         if retry_reject_count >= 2:
             rejection_reasons = "\n\n".join(
                 f"**{name}** ({retry_verdicts[name]}):\n{retry_evaluations[name]}"
@@ -409,14 +414,13 @@ THE PROPOSAL:
                 f"First synthesis:\n{proposal_text}\n\n"
                 f"Retry evaluations:\n\n{retry_formatted}"
             )
-            try:
-                proposal_text = cli_completion(
-                    retry_synthesis_input,
-                    system_prompt=synthesis_prompt_override or PERSONA_SYNTHESIS_PROMPT,
-                    backend=_model_to_backend(synthesis_model),
-                ) or proposal_text
-            except Exception as e:
-                print(f"[persona_council] Retry synthesis failed: {e}")
+            proposal_text = cli_completion(
+                retry_synthesis_input,
+                system_prompt=synthesis_prompt_override or PERSONA_SYNTHESIS_PROMPT,
+                backend=_model_to_backend(synthesis_model),
+            )
+            with open(os.path.join(coord_dir, "synthesis_retry.md"), "w") as f:
+                f.write(proposal_text)
             print("[persona_council] Retry passed — re-synthesized.")
 
     unknown = [n for n, v in verdicts.items() if v == "UNKNOWN"]

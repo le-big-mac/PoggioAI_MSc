@@ -28,6 +28,7 @@ def cli_completion(
     session_id: Optional[str] = None,
     resume: bool = False,
     allow_web: bool = False,
+    metadata: Optional[dict] = None,
 ) -> str:
     """LLM completion via CLI tool subprocess.
 
@@ -43,9 +44,14 @@ def cli_completion(
         session_id: Session UUID for multi-turn. Required if resume=True.
         resume: If True, resume the session instead of starting a new one.
         allow_web: If True, enable WebFetch/WebSearch tools.
+        metadata: Optional mutable dict populated with side-channel info
+                  (e.g. ``metadata["session_id"]`` for codex).
 
     Returns:
-        Response text. On error/timeout, returns a descriptive error string.
+        Response text.
+
+    Raises:
+        RuntimeError: On non-zero exit, timeout, or missing CLI tool.
     """
     full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
 
@@ -80,38 +86,34 @@ def cli_completion(
                 cmd.extend(["--resume", "latest"])
 
         else:
-            return f"[cli_completion error: unknown backend {backend!r}]"
+            raise RuntimeError(f"Unknown backend {backend!r}")
 
-        # Merge stderr into stdout for codex (session ID is in stderr)
-        if backend == "codex":
-            result = subprocess.run(
-                cmd, input=full_prompt, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True,
-                timeout=timeout, env=os.environ.copy(),
-            )
-        else:
-            result = subprocess.run(
-                cmd, input=full_prompt, capture_output=True, text=True,
-                timeout=timeout, env=os.environ.copy(),
-            )
+        result = subprocess.run(
+            cmd, input=full_prompt, capture_output=True, text=True,
+            timeout=timeout, env=os.environ.copy(),
+        )
 
     except subprocess.TimeoutExpired:
         elapsed = time.time() - t0
-        msg = f"[cli_completion timed out after {elapsed:.0f}s — backend={backend}, model={model}]"
-        logger.warning(msg)
-        return msg
+        raise RuntimeError(
+            f"cli_completion timed out after {elapsed:.0f}s — backend={backend}, model={model}"
+        )
     except FileNotFoundError:
-        msg = f"[cli_completion error: '{backend}' CLI tool not found on PATH]"
-        logger.error(msg)
-        return msg
+        raise RuntimeError(f"'{backend}' CLI tool not found on PATH")
 
     elapsed = time.time() - t0
 
+    # For codex, session ID is in stderr — extract it before checking rc
+    if backend == "codex" and metadata is not None and result.stderr:
+        sid = extract_session_id(result.stderr)
+        if sid:
+            metadata["session_id"] = sid
+
     if result.returncode != 0:
         error_text = (result.stderr or result.stdout or "")[:500]
-        msg = f"[cli_completion error (rc={result.returncode}): {error_text}]"
-        logger.warning(msg)
-        return msg
+        raise RuntimeError(
+            f"cli_completion failed (rc={result.returncode}, backend={backend}): {error_text}"
+        )
 
     output = result.stdout.strip()
 
