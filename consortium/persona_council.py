@@ -462,8 +462,28 @@ THE PROPOSAL TO EVALUATE:
             verdicts = retry_verdicts
             print("[persona_council] UNVIABLE — rejected on retry.")
         else:
+            # Retry passed — re-synthesize incorporating retry feedback
             verdicts = retry_verdicts
-            print("[persona_council] Retry passed — proposal accepted after revision.")
+            retry_formatted = "\n\n".join(
+                f"=== {name} (verdict: {retry_verdicts.get(name, 'UNKNOWN')}) ===\n{text}"
+                for name, text in retry_evaluations.items()
+            )
+            retry_accept = sum(1 for v in retry_verdicts.values() if v == "ACCEPT")
+            retry_synthesis_input = (
+                f"VERDICT SUMMARY (RETRY): {retry_accept} ACCEPT, {retry_reject_count} REJECT\n\n"
+                f"Original proposal (pre-fix):\n{task}\n\n"
+                f"First synthesis (the fix attempt):\n{proposal_text}\n\n"
+                f"Retry evaluations:\n\n{retry_formatted}"
+            )
+            try:
+                proposal_text = cli_completion(
+                    retry_synthesis_input,
+                    system_prompt=synthesis_prompt_override or PERSONA_SYNTHESIS_PROMPT,
+                    backend=_model_to_backend(synthesis_model),
+                ) or proposal_text
+            except Exception as e:
+                print(f"[persona_council] Retry synthesis failed ({e}), keeping first synthesis.")
+            print("[persona_council] Retry passed — re-synthesized with retry feedback.")
 
     # Warn about UNKNOWN verdicts
     unknown_personas = [name for name, v in verdicts.items() if v == "UNKNOWN"]
