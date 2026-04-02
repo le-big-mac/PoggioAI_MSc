@@ -176,9 +176,7 @@ def run_persona_council(
       6. If 2/3 reject: resume personas with synthesis, re-evaluate
          If 3/3 reject: UNVIABLE
     """
-    import subprocess as _sp
     import tempfile
-    import time as _time
     import uuid as _uuid
 
     specs = persona_specs or DEFAULT_PERSONA_MODEL_SPECS
@@ -189,64 +187,7 @@ def run_persona_council(
         coord_dir = tempfile.mkdtemp(prefix="persona_council_")
     os.makedirs(coord_dir, exist_ok=True)
 
-    # ------------------------------------------------------------------
-    # CLI helpers
-    # ------------------------------------------------------------------
-
-    def _cli_call(backend: str, model: str, prompt: str, session_id: str,
-                  resume: bool = False) -> str:
-        """Run a CLI call, optionally resuming a session. Returns stdout."""
-        if backend == "claude":
-            cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "5"]
-            if model:
-                cmd.extend(["--model", model])
-            cmd.extend(["--allowedTools", "WebFetch,WebSearch"])
-            if resume:
-                cmd.extend(["--resume", session_id])
-            else:
-                cmd.extend(["--session-id", session_id])
-        elif backend == "codex":
-            if resume:
-                cmd = ["codex", "exec", "resume", session_id,
-                       "--dangerously-bypass-approvals-and-sandbox"]
-            else:
-                cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
-            if model:
-                cmd.extend(["-m", model])
-        elif backend == "gemini":
-            cmd = ["gemini", "--approval-mode", "yolo"]
-            if model:
-                cmd.extend(["--model", model])
-            if resume:
-                cmd.extend(["--resume", session_id])
-        else:
-            raise ValueError(f"Unknown backend: {backend}")
-
-        result = _sp.run(
-            cmd, input=prompt, capture_output=True, text=True,
-            cwd=coord_dir, timeout=timeout_seconds,
-            env=os.environ.copy(),
-        )
-        return result.stdout.strip()
-
-    def _extract_session_id(stdout: str, backend: str) -> Optional[str]:
-        """Extract session ID from CLI output."""
-        for line in stdout.splitlines():
-            if "session id:" in line.lower() or "session_id:" in line.lower():
-                return line.split(":")[-1].strip()
-        return None
-
-    def _wait_for_files(paths: List[str], poll_interval: float = 3.0,
-                        max_wait: float = 600.0) -> None:
-        """Block until all paths exist."""
-        start = _time.time()
-        while True:
-            if all(os.path.isfile(p) for p in paths):
-                return
-            if _time.time() - start > max_wait:
-                missing = [p for p in paths if not os.path.isfile(p)]
-                raise TimeoutError(f"Timed out waiting for: {missing}")
-            _time.sleep(poll_interval)
+    from .cli_completion import extract_session_id
 
     # ------------------------------------------------------------------
     # Setup: assign session IDs and backends
@@ -288,10 +229,10 @@ End with: VERDICT: ACCEPT or REJECT
 THE PROPOSAL:
 {task}
 """
-        stdout = _cli_call(p["backend"], p["model"], prompt, p["session_id"], resume=False)
+        stdout = cli_completion(prompt, backend=p["backend"], model=p["model"], session_id=p["session_id"], timeout=timeout_seconds, allow_web=True)
         # For codex, extract the real session ID from output
         if p["backend"] == "codex":
-            real_sid = _extract_session_id(stdout, p["backend"])
+            real_sid = extract_session_id(stdout)
             if real_sid:
                 p["session_id"] = real_sid
 
@@ -339,7 +280,7 @@ THE PROPOSAL:
                 f"critic. Only concede if evidence from another persona is overwhelming.\n\n"
                 f"End with: VERDICT: ACCEPT or REJECT"
             )
-            stdout = _cli_call(p["backend"], p["model"], prompt, p["session_id"], resume=True)
+            stdout = cli_completion(prompt, backend=p["backend"], model=p["model"], session_id=p["session_id"], resume=True, timeout=timeout_seconds, allow_web=True)
 
             # Orchestrator appends the critique to the persona's file
             with open(os.path.join(coord_dir, f"{p['name']}.md"), "a") as f:
@@ -415,7 +356,7 @@ THE PROPOSAL:
                 f"Re-evaluate this revised proposal from your persona's lens.\n"
                 f"End with VERDICT: ACCEPT or REJECT"
             )
-            stdout = _cli_call(p["backend"], p["model"], prompt, p["session_id"], resume=True)
+            stdout = cli_completion(prompt, backend=p["backend"], model=p["model"], session_id=p["session_id"], resume=True, timeout=timeout_seconds, allow_web=True)
 
             # Orchestrator writes the retry eval
             retry_path = os.path.join(coord_dir, f"{p['name']}_retry.md")

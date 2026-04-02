@@ -2,8 +2,9 @@
 CLI completion helper — drop-in replacement for litellm.completion().
 
 Used for single-turn reasoning tasks (debate, synthesis, evaluation, scoring)
-where a full agentic loop isn't needed — just prompt in, text out, no tool use.
+where a full agentic loop isn't needed — just prompt in, text out.
 
+Supports session resume for multi-turn conversations (persona council debate).
 For multi-turn agentic tasks with tool use, use cli_agent.py instead.
 """
 
@@ -24,55 +25,66 @@ def cli_completion(
     backend: str = "claude",
     model: Optional[str] = None,
     timeout: int = 300,
+    session_id: Optional[str] = None,
+    resume: bool = False,
+    allow_web: bool = False,
 ) -> str:
-    """Single-turn LLM completion via CLI tool subprocess.
+    """LLM completion via CLI tool subprocess.
 
-    Replaces ``litellm.completion()`` for pure-reasoning tasks. Sends a prompt
-    to the CLI tool and returns the response text. No tool use is enabled —
-    the CLI agent just thinks and responds.
+    For pure-reasoning tasks — prompt in, text out. Optionally resumes a
+    prior session for multi-turn conversations.
 
     Args:
         prompt: The user/task prompt.
         system_prompt: Optional system context prepended to the prompt.
         backend: CLI backend — "claude", "codex", or "gemini".
-        model: Optional model override (e.g. "claude-sonnet-4-6").
+        model: Optional model override.
         timeout: Max seconds for the subprocess.
+        session_id: Session UUID for multi-turn. Required if resume=True.
+        resume: If True, resume the session instead of starting a new one.
+        allow_web: If True, enable WebFetch/WebSearch tools.
 
     Returns:
-        Response text. On error/timeout, returns a descriptive error string
-        (never raises — matches existing fallback patterns in counsel/persona).
+        Response text. On error/timeout, returns a descriptive error string.
     """
     full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
 
     t0 = time.time()
     try:
         if backend == "claude":
-            cmd = ["claude", "-p", "--output-format", "text"]
+            cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "5"]
             if model:
                 cmd.extend(["--model", model])
-            cmd.extend(["--allowedTools", ""])
-            result = subprocess.run(
-                cmd, input=full_prompt, capture_output=True, text=True,
-                timeout=timeout, env=os.environ.copy(),
-            )
+            tools = "WebFetch,WebSearch" if allow_web else ""
+            cmd.extend(["--allowedTools", tools])
+            if resume and session_id:
+                cmd.extend(["--resume", session_id])
+            elif session_id:
+                cmd.extend(["--session-id", session_id])
+
         elif backend == "codex":
-            cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
+            if resume and session_id:
+                cmd = ["codex", "exec", "resume", session_id,
+                       "--dangerously-bypass-approvals-and-sandbox"]
+            else:
+                cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
             if model:
-                cmd.extend(["--model", model])
-            result = subprocess.run(
-                cmd, input=full_prompt, capture_output=True, text=True,
-                timeout=timeout, env=os.environ.copy(),
-            )
+                cmd.extend(["-m", model])
+
         elif backend == "gemini":
             cmd = ["gemini", "--approval-mode", "yolo"]
             if model:
                 cmd.extend(["--model", model])
-            result = subprocess.run(
-                cmd, input=full_prompt, capture_output=True, text=True,
-                timeout=timeout, env=os.environ.copy(),
-            )
+            if resume and session_id:
+                cmd.extend(["--resume", session_id])
+
         else:
             return f"[cli_completion error: unknown backend {backend!r}]"
+
+        result = subprocess.run(
+            cmd, input=full_prompt, capture_output=True, text=True,
+            timeout=timeout, env=os.environ.copy(),
+        )
 
     except subprocess.TimeoutExpired:
         elapsed = time.time() - t0
@@ -108,10 +120,18 @@ def cli_completion(
                 output_chars=len(output),
             )
     except Exception:
-        pass  # Never break callers for tracking errors
+        pass
 
     logger.debug(
         "[cli_completion] backend=%s model=%s elapsed=%.1fs output_len=%d",
         backend, model, elapsed, len(output),
     )
     return output
+
+
+def extract_session_id(stdout: str) -> Optional[str]:
+    """Extract session ID from codex CLI output."""
+    for line in stdout.splitlines():
+        if "session id:" in line.lower():
+            return line.split(":")[-1].strip()
+    return None
