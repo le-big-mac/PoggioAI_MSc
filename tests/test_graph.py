@@ -6,6 +6,11 @@ import pytest
 
 
 class TestBuildPipelineStagesV2:
+    def test_quick_pipeline_starts_with_quick_develop(self):
+        from consortium.graph import build_pipeline_stages_quick
+        stages = build_pipeline_stages_quick()
+        assert stages[0] == "quick_develop"
+
     def test_base_pipeline_stage_count(self):
         from consortium.graph import build_pipeline_stages_v2
         stages = build_pipeline_stages_v2(enable_math_agents=False)
@@ -169,3 +174,30 @@ class TestScopedRouting:
         )
 
         assert route == "writeup_agent"
+
+
+class TestResumeEntrySelection:
+    def test_choose_quick_entry_stage_uses_requested_stage(self):
+        from consortium.graph import _choose_quick_entry_stage
+
+        assert _choose_quick_entry_stage("literature_review_agent") == "literature_review_agent"
+
+    def test_choose_quick_entry_stage_defaults_to_quick_develop(self):
+        from consortium.graph import _choose_quick_entry_stage
+
+        assert _choose_quick_entry_stage(None) == "quick_develop"
+
+    def test_choose_v2_entry_stage_routes_theory_track_stages_via_track_node(self):
+        from consortium.graph import _choose_v2_entry_stage
+
+        assert _choose_v2_entry_stage("math_prover_agent", enable_math_agents=True) == "theory_track"
+
+    def test_choose_v2_entry_stage_routes_experiment_track_stages_via_track_node(self):
+        from consortium.graph import _choose_v2_entry_stage
+
+        assert _choose_v2_entry_stage("experiment_verification_agent", enable_math_agents=True) == "experiment_track"
+
+    def test_choose_v2_entry_stage_uses_top_level_stage_directly(self):
+        from consortium.graph import _choose_v2_entry_stage
+
+        assert _choose_v2_entry_stage("writeup_agent", enable_math_agents=True) == "writeup_agent"

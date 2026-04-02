@@ -588,6 +588,7 @@ def main():
             workspace_dir=results_base_dir,
             pipeline_mode=effective_pipeline_mode,
             execution_scope=getattr(args, "execution_scope", "all"),
+            start_stage=_canonical_stage_name(args.start_from_stage) if args.start_from_stage else None,
             enable_math_agents=args.enable_math_agents,
             artifacts=ArtifactEnforcementConfig(
                 enforce_paper_artifacts=enforce_paper_artifacts,

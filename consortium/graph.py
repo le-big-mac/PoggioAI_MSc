@@ -110,6 +110,7 @@ def build_pipeline_stages_v2(enable_math_agents: bool, execution_scope: str = "a
 # ---------------------------------------------------------------------------
 
 QUICK_PIPELINE_STAGES = [
+    "quick_develop",
     "persona_council",
     "literature_review_agent",
     "brainstorm_agent",
@@ -121,6 +122,28 @@ QUICK_PIPELINE_STAGES = [
 
 def build_pipeline_stages_quick() -> list[str]:
     return list(QUICK_PIPELINE_STAGES)
+
+
+def _choose_quick_entry_stage(start_stage: Optional[str]) -> str:
+    if start_stage in QUICK_PIPELINE_STAGES:
+        return start_stage
+    return "quick_develop"
+
+
+def _choose_track_entry_stage(start_stage: Optional[str], stages: list[str], default_stage: str) -> str:
+    if start_stage in stages:
+        return start_stage
+    return default_stage
+
+
+def _choose_v2_entry_stage(start_stage: Optional[str], enable_math_agents: bool) -> str:
+    if start_stage in V2_PRE_TRACK_STAGES or start_stage in V2_POST_TRACK_STAGES:
+        return start_stage
+    if enable_math_agents and start_stage in MATH_PIPELINE_STAGES:
+        return "theory_track"
+    if start_stage in EXPERIMENT_PIPELINE_STAGES:
+        return "experiment_track"
+    return "persona_council"
 
 
 def _read_file_for_verdict(path: str, max_chars: int = 50000) -> str:
@@ -482,6 +505,7 @@ def build_research_graph_quick(config: "ResearchGraphConfig"):
     persona_debate_rounds = config.persona_council.debate_rounds
     persona_synthesis_model = config.persona_council.synthesis_model
     persona_max_post_vote_retries = config.persona_council.max_post_vote_retries
+    start_stage = config.start_stage
 
     counsel_kwargs: dict = {}
 
@@ -534,7 +558,7 @@ def build_research_graph_quick(config: "ResearchGraphConfig"):
     for name, node in nodes.items():
         graph.add_node(name, node)
 
-    graph.set_entry_point("quick_develop")
+    graph.set_entry_point(_choose_quick_entry_stage(start_stage))
     graph.add_edge("quick_develop", "persona_council")
     graph.add_edge("persona_council", "literature_review_agent")
     graph.add_edge("literature_review_agent", "lit_review_gate")
@@ -1190,6 +1214,7 @@ def build_theory_track_subgraph(
     summary_model_id: Optional[str] = "claude-sonnet-4-6",
     model_registry: Optional[Any] = None,
     adversarial_verification: bool = False,
+    start_stage: Optional[str] = None,
 ):
     graph = StateGraph(ResearchState)
     counsel_kwargs = {"counsel_models": counsel_models} if counsel_models is not None else {}
@@ -1358,7 +1383,9 @@ def build_theory_track_subgraph(
     graph.add_node("human_review_gate", human_review_gate)
     graph.add_node("theory_track_repair_gate", theory_track_repair_gate)
 
-    graph.set_entry_point("math_literature_agent")
+    graph.set_entry_point(
+        _choose_track_entry_stage(start_stage, MATH_PIPELINE_STAGES, "math_literature_agent")
+    )
     graph.add_edge("math_literature_agent", "math_proposer_agent")
     graph.add_edge("math_proposer_agent", "goal_tag_validation_gate")
     graph.add_edge("goal_tag_validation_gate", "math_prover_agent")
@@ -1382,6 +1409,7 @@ def build_experiment_track_subgraph(
     counsel_models: Optional[List[Any]] = None,
     summary_model_id: Optional[str] = "claude-sonnet-4-6",
     model_registry: Optional[Any] = None,
+    start_stage: Optional[str] = None,
 ):
     graph = StateGraph(ResearchState)
     counsel_kwargs = {"counsel_models": counsel_models} if counsel_models is not None else {}
@@ -1414,7 +1442,9 @@ def build_experiment_track_subgraph(
         "experiment_transcription_agent",
         _wrap(build_experiment_transcription_node(_m("experiment_transcription_agent"), workspace_dir, authorized_imports, **counsel_kwargs), "experiment_transcription_agent"),
     )
-    graph.set_entry_point("experiment_literature_agent")
+    graph.set_entry_point(
+        _choose_track_entry_stage(start_stage, EXPERIMENT_PIPELINE_STAGES, "experiment_literature_agent")
+    )
     graph.add_edge("experiment_literature_agent", "experiment_design_agent")
     graph.add_edge("experiment_design_agent", "experimentation_agent")
     graph.add_edge("experimentation_agent", "experiment_verification_agent")
@@ -2210,6 +2240,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
     workspace_dir = config.workspace_dir
     pipeline_mode = config.pipeline_mode
     execution_scope = config.execution_scope
+    start_stage = config.start_stage
     enable_math_agents = config.enable_math_agents
     enable_milestone_gates = config.enable_milestone_gates
     adversarial_verification = config.adversarial_verification
@@ -2276,6 +2307,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
                 summary_model_id=summary_model_id,
                 model_registry=cli_backend_registry,
                 adversarial_verification=adversarial_verification,
+                start_stage=start_stage,
             )
         theory_track_node = build_track_subgraph_node(theory_subgraph, "theory_track_status", workspace_dir=workspace_dir)
 
@@ -2301,6 +2333,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
             counsel_models=None,
             summary_model_id=summary_model_id,
             model_registry=cli_backend_registry,
+            start_stage=start_stage,
         )
 
     # Build all nodes
@@ -2397,7 +2430,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
     # --- Edge wiring ---
 
     # Entry: persona council
-    graph.set_entry_point("persona_council")
+    graph.set_entry_point(_choose_v2_entry_stage(start_stage, enable_math_agents))
     graph.add_edge("persona_council", "literature_review_agent")
 
     # Lit review → gate

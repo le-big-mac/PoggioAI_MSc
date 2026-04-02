@@ -16,16 +16,7 @@ budget:
 
 # --- Per-agent backend overrides (optional) ---
 # Assign different CLI backends or models to specific agents.
-agent_backends:
-  literature_review_agent:
-    backend: claude
-    model: claude-opus-4-6
-  research_plan_writeup_agent:
-    backend: claude
-    model: claude-opus-4-6
-  quick_verdict:
-    backend: claude
-    model: claude-opus-4-6
+agent_backends: {}
 
 # --- Counsel mode (multi-model debate) ---
 # counsel:
@@ -41,7 +32,7 @@ agent_backends:
 # --- Persona council (V2 pipeline) ---
 persona_council:
   max_debate_rounds: 2
-  synthesis_model: claude-opus-4-6
+  synthesis_model: gpt-5.4
   personas:
     - persona: practical_compass
       model: gpt-5.4
@@ -50,9 +41,9 @@ persona_council:
       model: gpt-5.4
       reasoning_effort: high
     - persona: narrative_architect
-      model: claude-opus-4-6
+      model: gpt-5.4
       reasoning_effort: high
 
 # --- Duality check model ---
 duality_check:
-  model: claude-opus-4-6
+  model: gpt-5.4
