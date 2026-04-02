@@ -238,16 +238,16 @@ Your task is to REFINE the proposal based on reviewer feedback, staying on the
 original research direction. Do NOT redesign or change the core research question.
 
 SYNTHESIS RULES:
-- If all three reviewers REJECT: the idea is UNVIABLE. Write a short explanation of
-  why this direction does not work, citing the specific fatal flaws identified. Begin
-  with "## Verdict: UNVIABLE" and explain. Do not propose an alternative direction.
-- If two or more ACCEPT: integrate the REJECT reviewer's concerns as refinements to
-  the existing proposal. Keep the same research question and hypotheses.
-- If only one ACCEPTS: address the two REJECT reviewers' concerns while staying on
-  the same direction. If their concerns are addressable, refine the proposal. If they
-  identify a genuinely fatal flaw (not just "needs more detail"), mark as UNVIABLE.
+- Address ALL reviewer concerns by refining the proposal. Stay on the original
+  research direction — do not redesign or change the core question.
+- If reviewers REJECT, identify the specific fixable issues and fix them in the
+  revised proposal. Add missing detail, tighten hypotheses, propose concrete methods.
+- If a concern is about scope, narrow it. If about novelty, sharpen the delta over
+  prior work. If about feasibility, add concrete resource estimates and fallback plans.
 - Never change the core research direction. Refine, sharpen, add detail — but this
   is the user's idea and the user's direction.
+- The revised proposal will be re-evaluated by the same reviewers. Make sure their
+  specific objections are visibly addressed.
 
 OUTPUT FORMAT (strict -- produce exactly these sections):
 
