@@ -168,6 +168,14 @@ Examples:
     )
 
     parser.add_argument(
+        "--execution-scope",
+        type=str,
+        choices=["all", "theory", "experiment"],
+        default="all",
+        help="Constrain execution after planning to all tracks, theory only, or experiment only.",
+    )
+
+    parser.add_argument(
         "--require-experiment-plan",
         action="store_true",
         help="When paper artifact enforcement is enabled, also require experiments_to_run_later.md."

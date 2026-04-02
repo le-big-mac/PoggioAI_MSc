@@ -32,6 +32,7 @@ class ResearchState(TypedDict):
     task: str
     workspace_dir: str
     pipeline_mode: str          # default | full_research | quick
+    execution_scope: str        # all | theory | experiment
     math_enabled: bool
     enforce_paper_artifacts: bool
     enforce_editorial_artifacts: bool

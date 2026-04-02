@@ -257,16 +257,22 @@ def _pipeline_args_for_command(command: str, modifiers: list[str]) -> list[str]:
     args = []
     if command == "plan":
         args.append("--quick-pass")
-    elif command == "theory":
+    elif command in {"run", "theory"}:
         args.append("--enable-math-agents")
-    # experiment and run use defaults (experiment track always on, theory off unless requested)
+    if command == "experiment":
+        args.extend(["--execution-scope", "experiment"])
+    elif command == "theory":
+        args.extend(["--execution-scope", "theory"])
+    # experiment uses defaults (experiment track on, theory off).
     if "counsel" in modifiers:
         args.append("--enable-counsel")
     return args
 
 
 def _resume_stage_for_command(command: str) -> str | None:
-    if command in {"run", "experiment"}:
+    if command == "run":
+        return "math_literature_agent"
+    if command == "experiment":
         return "experiment_literature_agent"
     if command == "theory":
         return "math_literature_agent"

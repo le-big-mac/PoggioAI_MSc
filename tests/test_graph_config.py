@@ -27,6 +27,7 @@ class TestDefaults:
     def test_top_level_defaults(self):
         cfg = _minimal_config()
         assert cfg.pipeline_mode == "default"
+        assert cfg.execution_scope == "all"
         assert cfg.enable_math_agents is False
         assert cfg.enable_milestone_gates is False
         assert cfg.adversarial_verification is False
@@ -77,6 +78,7 @@ class TestSerialization:
             cli_backend_registry=_registry(),
             workspace_dir="/tmp/full",
             pipeline_mode="full_research",
+            execution_scope="theory",
             enable_math_agents=True,
             enable_milestone_gates=True,
             adversarial_verification=True,
@@ -108,6 +110,7 @@ class TestSerialization:
         )
         assert restored.workspace_dir == "/tmp/full"
         assert restored.pipeline_mode == "full_research"
+        assert restored.execution_scope == "theory"
         assert restored.enable_math_agents is True
         assert restored.min_review_score == 6
         assert restored.authorized_imports == ["numpy", "scipy"]

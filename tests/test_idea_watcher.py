@@ -89,11 +89,12 @@ def test_build_launch_args_resume_full_run_from_issue_workspace():
     args = idea_watcher._build_launch_args("run", ["counsel"], "/tmp/existing_workspace")
 
     assert args == [
+        "--enable-math-agents",
         "--enable-counsel",
         "--resume",
         "/tmp/existing_workspace",
         "--start-from-stage",
-        "experiment_literature_agent",
+        "math_literature_agent",
     ]
 
 
@@ -102,6 +103,8 @@ def test_build_launch_args_resume_theory_run_enables_math():
 
     assert args == [
         "--enable-math-agents",
+        "--execution-scope",
+        "theory",
         "--resume",
         "/tmp/existing_workspace",
         "--start-from-stage",
@@ -112,4 +115,17 @@ def test_build_launch_args_resume_theory_run_enables_math():
 def test_build_launch_args_falls_back_to_fresh_run_without_workspace():
     args = idea_watcher._build_launch_args("run", [], None)
 
-    assert args == []
+    assert args == ["--enable-math-agents"]
+
+
+def test_build_launch_args_resume_experiment_run_stays_non_math():
+    args = idea_watcher._build_launch_args("experiment", [], "/tmp/existing_workspace")
+
+    assert args == [
+        "--execution-scope",
+        "experiment",
+        "--resume",
+        "/tmp/existing_workspace",
+        "--start-from-stage",
+        "experiment_literature_agent",
+    ]

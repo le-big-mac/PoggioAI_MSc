@@ -95,11 +95,12 @@ V2_POST_TRACK_STAGES = [
 ]
 
 
-def build_pipeline_stages_v2(enable_math_agents: bool) -> list[str]:
+def build_pipeline_stages_v2(enable_math_agents: bool, execution_scope: str = "all") -> list[str]:
     stages = list(V2_PRE_TRACK_STAGES)
-    if enable_math_agents:
+    if execution_scope in {"all", "theory"} and enable_math_agents:
         stages.extend(MATH_PIPELINE_STAGES)
-    stages.extend(EXPERIMENT_PIPELINE_STAGES)
+    if execution_scope in {"all", "experiment"}:
+        stages.extend(EXPERIMENT_PIPELINE_STAGES)
     stages.extend(V2_POST_TRACK_STAGES)
     return stages
 
@@ -642,10 +643,18 @@ def track_router(state: ResearchState) -> list[Send]:
     theory_questions = list(track_decomposition.get("theory_questions") or [])
     empirical_questions = list(track_decomposition.get("empirical_questions") or [])
     recommended_track = str(track_decomposition.get("recommended_track", "")).strip().lower()
+    execution_scope = str(state.get("execution_scope", "all")).strip().lower()
 
     sends: list[Send] = []
-    theory_allowed = state.get("math_enabled", False) and recommended_track in {"", "both", "theory"}
-    experiment_allowed = recommended_track in {"", "both", "empirical"}
+    theory_allowed = (
+        execution_scope in {"all", "theory"}
+        and state.get("math_enabled", False)
+        and recommended_track in {"", "both", "theory"}
+    )
+    experiment_allowed = (
+        execution_scope in {"all", "experiment"}
+        and recommended_track in {"", "both", "empirical"}
+    )
 
     if theory_allowed and theory_questions:
         sends.append(
@@ -956,9 +965,14 @@ def validation_router(state: ResearchState) -> str:
     # Route based on review verdict fix type classification
     workspace = state.get("workspace_dir") or "."
     fix_type = classify_review_fixes(workspace)
+    execution_scope = str(state.get("execution_scope", "all")).strip().lower()
     if fix_type == "experiment":
+        if execution_scope == "theory":
+            return "writeup_agent"
         return "experiment_track"
     if fix_type == "theory":
+        if execution_scope == "experiment":
+            return "writeup_agent"
         return "theory_track"
     return "writeup_agent"
 
@@ -2195,6 +2209,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
     # Unpack config to local variables.
     workspace_dir = config.workspace_dir
     pipeline_mode = config.pipeline_mode
+    execution_scope = config.execution_scope
     enable_math_agents = config.enable_math_agents
     enable_milestone_gates = config.enable_milestone_gates
     adversarial_verification = config.adversarial_verification

@@ -72,6 +72,18 @@ class TestBuildPipelineStagesV2:
         assert stages[4] == "formalize_goals_agent"
         assert stages[5] == "research_plan_writeup_agent"
 
+    def test_theory_scope_excludes_experiment_stages(self):
+        from consortium.graph import build_pipeline_stages_v2
+        stages = build_pipeline_stages_v2(enable_math_agents=True, execution_scope="theory")
+        assert "math_literature_agent" in stages
+        assert "experiment_literature_agent" not in stages
+
+    def test_experiment_scope_excludes_math_stages(self):
+        from consortium.graph import build_pipeline_stages_v2
+        stages = build_pipeline_stages_v2(enable_math_agents=True, execution_scope="experiment")
+        assert "experiment_literature_agent" in stages
+        assert "math_literature_agent" not in stages
+
 
 class TestStageAliases:
     def test_canonical_stage_name_council(self):
@@ -103,3 +115,57 @@ class TestStageAliases:
         stages = build_pipeline_stages_v2(enable_math_agents=False)
         with pytest.raises(ValueError, match="Unknown --start-from-stage"):
             _resolve_start_stage_index("nonexistent_stage", stages)
+
+
+class TestScopedRouting:
+    def test_track_router_theory_scope_only_sends_theory(self):
+        from consortium.graph import track_router
+
+        sends = track_router(
+            {
+                "execution_scope": "theory",
+                "math_enabled": True,
+                "track_decomposition": {
+                    "recommended_track": "both",
+                    "theory_questions": ["Q1"],
+                    "empirical_questions": ["E1"],
+                },
+            }
+        )
+
+        assert len(sends) == 1
+        assert sends[0].node == "theory_track"
+
+    def test_track_router_experiment_scope_only_sends_experiment(self):
+        from consortium.graph import track_router
+
+        sends = track_router(
+            {
+                "execution_scope": "experiment",
+                "math_enabled": True,
+                "track_decomposition": {
+                    "recommended_track": "both",
+                    "theory_questions": ["Q1"],
+                    "empirical_questions": ["E1"],
+                },
+            }
+        )
+
+        assert len(sends) == 1
+        assert sends[0].node == "experiment_track"
+
+    def test_validation_router_respects_theory_scope(self, monkeypatch):
+        from consortium.graph import validation_router
+
+        monkeypatch.setattr("consortium.graph.classify_review_fixes", lambda workspace: "experiment")
+        route = validation_router(
+            {
+                "execution_scope": "theory",
+                "finished": False,
+                "workspace_dir": ".",
+                "validation_retry_count": 0,
+                "max_validation_retries": 3,
+            }
+        )
+
+        assert route == "writeup_agent"

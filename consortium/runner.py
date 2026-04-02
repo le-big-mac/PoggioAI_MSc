@@ -477,7 +477,12 @@ def main():
         print("Pipeline mode: full_research (fixed-stage)")
         if args.enable_math_agents:
             print("Math agent workflow enabled.")
-        pipeline_stages = build_pipeline_stages_v2(args.enable_math_agents)
+        pipeline_stages = build_pipeline_stages_v2(
+            args.enable_math_agents,
+            execution_scope=getattr(args, "execution_scope", "all"),
+        )
+        if getattr(args, "execution_scope", "all") != "all":
+            print(f"Execution scope: {args.execution_scope}")
         print("Pipeline version: v2 (persona-council-driven)")
     try:
         start_stage_index = (
@@ -582,6 +587,7 @@ def main():
             cli_backend_registry=cli_registry,
             workspace_dir=results_base_dir,
             pipeline_mode=effective_pipeline_mode,
+            execution_scope=getattr(args, "execution_scope", "all"),
             enable_math_agents=args.enable_math_agents,
             artifacts=ArtifactEnforcementConfig(
                 enforce_paper_artifacts=enforce_paper_artifacts,
@@ -628,6 +634,7 @@ def main():
             "task": task,
             "workspace_dir": results_base_dir,
             "pipeline_mode": effective_pipeline_mode,
+            "execution_scope": getattr(args, "execution_scope", "all"),
             "math_enabled": args.enable_math_agents,
             "enforce_paper_artifacts": enforce_paper_artifacts,
             "enforce_editorial_artifacts": enforce_editorial_artifacts,

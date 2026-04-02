@@ -118,6 +118,7 @@ class ResearchGraphConfig:
 
     # -- pipeline flags ----------------------------------------------------
     pipeline_mode: str = "default"
+    execution_scope: str = "all"
     enable_math_agents: bool = False
     enable_milestone_gates: bool = False
     adversarial_verification: bool = False
@@ -155,6 +156,7 @@ class ResearchGraphConfig:
         d: Dict[str, Any] = {
             "workspace_dir": self.workspace_dir,
             "pipeline_mode": self.pipeline_mode,
+            "execution_scope": self.execution_scope,
             "enable_math_agents": self.enable_math_agents,
             "enable_milestone_gates": self.enable_milestone_gates,
             "adversarial_verification": self.adversarial_verification,
@@ -191,6 +193,7 @@ class ResearchGraphConfig:
             cli_backend_registry=cli_backend_registry,
             workspace_dir=data.get("workspace_dir", ""),
             pipeline_mode=data.get("pipeline_mode", "default"),
+            execution_scope=data.get("execution_scope", "all"),
             enable_math_agents=data.get("enable_math_agents", False),
             enable_milestone_gates=data.get("enable_milestone_gates", False),
             adversarial_verification=data.get("adversarial_verification", False),
