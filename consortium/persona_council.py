@@ -383,12 +383,28 @@ THE PROPOSAL TO EVALUATE:
         proposal_text = first_eval
 
     # ------------------------------------------------------------------
-    # Phase 4 — If 2+ rejected, re-run personas on the synthesized fix.
-    #           If 2+ reject again, return UNVIABLE with reasons.
+    # Phase 4 — Handle rejections
+    #   3/3 reject → UNVIABLE immediately (no point retrying)
+    #   2/3 reject → synthesize fix, re-run council, 2+ reject again → UNVIABLE
+    #   0-1 reject → proceed with synthesized proposal
     # ------------------------------------------------------------------
 
-    if reject_count >= 2:
-        print(f"[persona_council] {reject_count}/3 rejected — re-running council on synthesized fix...")
+    if reject_count == 3:
+        # Unanimous reject — UNVIABLE, no retry
+        rejection_reasons = "\n\n".join(
+            f"**{name}**:\n{evaluations[name]}"
+            for name in evaluations
+        )
+        proposal_text = (
+            "## Verdict: UNVIABLE\n\n"
+            "All three personas unanimously rejected this research direction.\n\n"
+            "## Rejection Reasons\n\n"
+            f"{rejection_reasons}"
+        )
+        print("[persona_council] UNVIABLE — unanimous rejection.")
+
+    elif reject_count == 2:
+        print("[persona_council] 2/3 rejected — re-running council on synthesized fix...")
 
         # Clean coordination dir for second round
         import shutil as _shutil
@@ -397,7 +413,7 @@ THE PROPOSAL TO EVALUATE:
             _shutil.rmtree(coord_dir_retry)
         os.makedirs(coord_dir_retry, exist_ok=True)
 
-        # Re-run all personas on the synthesized proposal (not the original task)
+        # Re-run all personas on the synthesized proposal
         retry_evaluations: Dict[str, str] = {}
         retry_verdicts: Dict[str, str] = {}
 
@@ -430,7 +446,6 @@ THE PROPOSAL TO EVALUATE:
         print(f"[persona_council] Retry verdicts: {retry_verdicts}")
 
         if retry_reject_count >= 2:
-            # Still rejected — return UNVIABLE with reasons
             rejection_reasons = "\n\n".join(
                 f"**{name}** ({retry_verdicts[name]}):\n{retry_evaluations[name]}"
                 for name in retry_evaluations
@@ -438,18 +453,17 @@ THE PROPOSAL TO EVALUATE:
             )
             proposal_text = (
                 "## Verdict: UNVIABLE\n\n"
-                "This research direction was rejected by the persona council after "
-                "two rounds of evaluation. The synthesis agent attempted to address "
-                "the initial concerns but the revised proposal was still rejected.\n\n"
+                "This research direction was rejected after two rounds of evaluation. "
+                "The synthesis agent attempted to address the initial concerns but "
+                "the revised proposal was still rejected.\n\n"
                 "## Rejection Reasons\n\n"
                 f"{rejection_reasons}"
             )
             verdicts = retry_verdicts
-            print(f"[persona_council] UNVIABLE — rejected on retry.")
+            print("[persona_council] UNVIABLE — rejected on retry.")
         else:
-            # Retry passed — use the synthesized proposal, update verdicts
             verdicts = retry_verdicts
-            print(f"[persona_council] Retry passed — proposal accepted after revision.")
+            print("[persona_council] Retry passed — proposal accepted after revision.")
 
     # Warn about UNKNOWN verdicts
     unknown_personas = [name for name, v in verdicts.items() if v == "UNKNOWN"]
