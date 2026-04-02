@@ -396,19 +396,7 @@ THE PROPOSAL:
     # Phase 4: Handle rejections (same sessions for retry)
     # ------------------------------------------------------------------
 
-    if reject_count == 3:
-        rejection_reasons = "\n\n".join(
-            f"**{name}**:\n{evaluations[name]}" for name in evaluations
-        )
-        proposal_text = (
-            "## Verdict: UNVIABLE\n\n"
-            "All three personas unanimously rejected this research direction.\n\n"
-            "## Rejection Reasons\n\n"
-            f"{rejection_reasons}"
-        )
-        print("[persona_council] UNVIABLE — unanimous rejection.")
-
-    elif reject_count == 2:
+    if reject_count >= 2:
         print("[persona_council] 2/3 rejected — resuming personas with synthesized fix...")
 
         # Resume each persona with the synthesis, ask to re-evaluate
