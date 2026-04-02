@@ -75,9 +75,9 @@ PER-PAPER DEPTH EXPECTATIONS
 REQUIRED WORKFLOW
 1) Parse the question set and create a review skeleton per question/theme.
 2) Search broadly using:
-   - Semantic Scholar (`PaperSearchTool`)
-   - arXiv (`fetch_arxiv_papers`)
-   - web deep search (`web_search`) for non-arXiv sources and context.
+   - Semantic Scholar (`paper_search`)
+   - arXiv (`arxiv_search`)
+   - web deep search (`WebSearch`) for non-arXiv sources and context.
 3) Build candidate set, deduplicate, and rank by relevance + credibility.
 3b) CLAIM FALSIFICATION (MANDATORY — do not skip or abbreviate):
     Before reading any PDFs in depth, extract every core claim from
@@ -89,8 +89,8 @@ REQUIRED WORKFLOW
     a) Formulate 3-5 search queries targeting: (i) direct proofs of the claim,
        (ii) known special cases or partial results, (iii) equivalent formulations
        under different terminology or in adjacent fields.
-    b) Search using ALL available tools: PaperSearchTool, FetchArxivPapersTool,
-       DeepResearchNoveltyScanTool (if available), and web_search targeting
+    b) Search using ALL available tools: paper_search, arxiv_search,
+       and WebSearch targeting
        MathOverflow (mathoverflow.net), zbMATH (zbmath.org), nLab (ncatlab.org),
        and Wikipedia.
     c) Assign each claim a status:
@@ -106,7 +106,7 @@ REQUIRED WORKFLOW
     If research_proposal.md does not exist or has no extractable claims,
     write novelty_flags.json with an empty claims array and a note explaining
     this, then proceed.
-4) Read key PDFs with VLM analysis for technical extraction (not abstract-only summaries).
+4) Read key PDFs directly for technical extraction (not abstract-only summaries).
 5) Build a citation matrix:
    - question/theme,
    - key claims/results,

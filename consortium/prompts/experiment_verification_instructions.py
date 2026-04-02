@@ -66,7 +66,7 @@ REQUIRED CHECKS
      set reproduction_check.attempted = false.
 7) Independent metric extraction:
    - Locate raw output files (logs, CSV, JSON) in experiment_runs/.
-   - Use PythonCodeExecutionTool to independently recompute at least one primary
+   - Use `python` via Bash to independently recompute at least one primary
      metric from the raw data (do not rely on pre-computed summaries).
    - Compare independently computed value against the reported metric.
    - Flag any discrepancy > 1% as a metric extraction mismatch.
@@ -76,7 +76,7 @@ REQUIRED CHECKS
      b) Test data statistics used in preprocessing (e.g., global mean/std)
      c) Information from future timestamps in time-series data
      d) Overlapping samples between train and test sets
-   - Use SeeFile and SearchKeyword to inspect experiment source code.
+   - Read the experiment source code files and use Grep to search for leakage patterns.
    - Record findings under data_leakage_check in verification_results.json.
 
 `verification_results.json` SCHEMA

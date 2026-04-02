@@ -244,7 +244,7 @@ For non-INCOMPLETE follow-up cycles (e.g., duality gate re-entry or brainstorm r
 ## PROGRAMMATIC VALIDATION (MANDATORY)
 
 After writing `research_goals.json` and `track_decomposition.json`, use
-`PythonCodeExecutionTool` to run the following validation scripts. Fix any errors
+`python` via Bash to run the following validation scripts. Fix any errors
 they report before returning.
 
 ### Validation 1 — Dependency DAG Check

@@ -272,7 +272,7 @@ CONTENT: [Analysis after loading numpy array]
    - Read experimental summary files (*summary*.json) - extract key findings and figure references
    - Read implementation files (best_code.py, etc.) - extract methodology and referenced plots
 4. **Round 4**: Referenced figure analysis based on Round 3 discoveries:
-   - Analyze specific plots mentioned in summary files using VLMDocumentAnalysisTool
+   - Analyze specific plots mentioned in summary files using reading the image directly
    - Process figures referenced in implementation code
 5. **Rounds 5-N**: Systematic analysis of remaining filtered files
 6. **Final Round**: Compile all descriptions into structure_analysis.txt with priority-based organization
@@ -292,8 +292,8 @@ CONTENT: [Analysis after loading numpy array]
 **Path Format**: All file paths use relative paths starting with "experiment_data/" for easy WriteupAgent access.
 
 **File Reading Requirements:**
-- Use SeeFile to read text files (.json, .py, .md, .txt, .csv)
-- Use VLMDocumentAnalysisTool for images (.png, .pdf, .svg)
+- Read text files (.json, .py, .md, .txt, .csv) directly
+- Read image files (.png, .pdf, .svg) directly for visual analysis
 - Load and analyze data files (.npy, .pkl) where possible
 - Read actual content, never guess from filenames
 
@@ -341,10 +341,9 @@ for concept in research_concepts:
         break
     # Perform citation search with per-concept timeout
     try:
-        citations = citation_search_tool(
-            search_query=concept,
-            max_results=2,
-            timeout=timeout_per_concept  # Each concept gets equal time slice
+        citations = citation_search(
+            query=concept,
+            limit=2
         )
         # Process results
     except Exception as e:
@@ -361,18 +360,18 @@ for concept in research_concepts:
 
 **🚨 CRITICAL: PROPER BIBTEX FORMATTING REQUIRED 🚨**
 
-**❌ NEVER write raw JSON to references.bib file:**
+**NEVER write raw JSON to references.bib file:**
 ```python
 # WRONG - dumps entire JSON response
-citations = citation_search_tool(search_query=concept)
+citations = citation_search(query=concept)
 bibtex_entries += citations  # This writes JSON, not BibTeX!
 ```
 
-**✅ ALWAYS extract only the bibtex_entries from JSON:**
+**ALWAYS extract only the bibtex_entries from JSON:**
 ```python
 # CORRECT - extract clean BibTeX entries
 import json
-citations_json = citation_search_tool(search_query=concept)
+citations_json = citation_search(query=concept)
 citations_data = json.loads(citations_json)
 for entry in citations_data.get("bibtex_entries", []):
     bibtex_entries += entry + "\n\n"  # Extract actual BibTeX

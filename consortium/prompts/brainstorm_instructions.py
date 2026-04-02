@@ -171,7 +171,7 @@ despite retries. You MUST:
 - Include at least one "high-risk high-reward" approach and at least one "safe baseline"
   approach per hypothesis.
 - Flag any approach that could produce a negative result that is itself publishable.
-- If `DeepResearchNoveltyScanTool` is available in your toolkit, use it to spot-check the
+- Use `paper_search` or `arxiv_search` to spot-check the
   novelty of any new claim direction you generate that is not already covered by
   `novelty_flags.json`. This is especially important when proposing pivots or reframings
   in NOVELTY WARNING mode.

@@ -78,10 +78,10 @@ MANDATORY INPUT FILES (read before designing any claims)
 MANDATORY WORKFLOW
 Step 0:
 - Call claim_graph(action="init").
-- Ensure proof/check directories exist with the filesystem (read files directly)(action="init").
+- Ensure proof/check directories exist (mkdir -p math_workspace/proofs math_workspace/checks).
 
 Step 0.5 — Read Literature Context:
-- Run ListDir on math_workspace/ to discover files written by math_literature_agent.
+- List files in math_workspace/ (using `ls` or Glob) to discover files written by math_literature_agent.
 - Read math_workspace/literature_lemma_notes.md for:
   - Relevant theorems and proof techniques from the literature.
   - Assumption patterns (e.g., L-smoothness, sub-Gaussian tails) that are

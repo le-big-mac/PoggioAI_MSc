@@ -87,11 +87,11 @@ theory_sections.tex:
 - Use \\cite{<key>} for all references; keys from paper_workspace/references.bib.
 - All notation via \\newcommand — no hardcoded symbols. Definitions go in
   paper_workspace/math_preamble.tex. IMPORTANT: Before writing this file:
-  (1) Use SeeFile to check if math_preamble.tex already exists.
+  (1) Read math_preamble.tex to check if it already exists.
   (2) If it exists, read its contents and APPEND new \\newcommand entries
-      using ModifyFile — do NOT overwrite with CreateFileWithContent.
+      by editing the file — do NOT overwrite by writing a new file.
   (3) Before appending, check for duplicate command names to avoid redefinition errors.
-  (4) Only use CreateFileWithContent if the file does not exist yet.
+  (4) Only write a new file if it does not exist yet.
 
 appendix_proofs.tex:
 - Fragment only: no \\appendix command — writeup_agent controls document structure.

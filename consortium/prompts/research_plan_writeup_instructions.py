@@ -49,16 +49,15 @@ Read and parse these files before writing:
 ## WRITEUP WORKFLOW
 
 1. Read all input files listed above.
-2. Use LaTeXGeneratorTool to produce `research_plan.tex` with all required sections.
-3. Use LaTeXReflectionTool to iteratively improve the document quality.
-4. Use LaTeXSyntaxCheckerTool to validate syntax before compilation.
-5. Use tectonic to compile to PDF.
-6. Use VLMDocumentAnalysisTool to visually verify the compiled PDF.
+2. Write `research_plan.tex` directly with all required sections.
+3. Iteratively review and improve the document quality.
+4. Compile with `tectonic paper_workspace/research_plan.tex` and read any errors to validate syntax.
+5. Read the compiled PDF to visually verify the output.
 
 ## LATEX FAILURE POLICY
 
 - Attempt compilation up to 2 times.
-- On first failure: read the error output, use LaTeXSyntaxCheckerTool to identify the issue,
+- On first failure: read the error output from tectonic to identify the issue,
   fix the .tex file, and retry compilation.
 - If both attempts fail: write the error to `paper_workspace/research_plan_compile_error.txt`,
   leave the .tex file in place, and return WITHOUT raising an exception.

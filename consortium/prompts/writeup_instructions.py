@@ -141,7 +141,7 @@ If math workflow artifacts are present:
 **MANDATORY READING WORKFLOW**:
 1. **Start with `research_idea.md`** - Understand the research question and goals
 2. **Read all three summary JSON files** - Extract quantitative results, key insights, and conclusions
-3. **Analyze each PNG figure** - Use VLMDocumentAnalysisTool to understand what each plot shows
+3. **Analyze each PNG figure** - Read each image file directly to understand what each plot shows
 4. **Review `auto_plot_aggregator.py`** - Understand the data pipeline and plotting methodology
 
 **PAPER STRUCTURE GUIDANCE**:
@@ -153,16 +153,16 @@ If math workflow artifacts are present:
 
 ### Leverage Organized Experiment Data
 - Access experiment files via symlinked paths (experiment_data/...)
-- Use VLMDocumentAnalysisTool for images already organized in experiment_data/figures/
+- Read image files directly from experiment_data/figures/
 - Reference actual experimental implementations and results
 - Build on ResourcePreparationAgent's comprehensive file analysis
 
-### Data Passing to LaTeX Tools
-**CRITICAL:** LaTeX tools cannot access data files. Provide complete numerical data in `content_description`:
+### Data Extraction for LaTeX Content
+**CRITICAL:** When writing LaTeX, include complete numerical data directly:
 - Extract all metrics from baseline_summary.json, research_summary.json, ablation_summary.json
 - Include exact values: F1 scores, hyperparameters, dataset sizes, figure filenames
-- Never use generic descriptions (❌ "good results" → ✅ "F1 = 0.637")
-- Verify generated .tex files contain exact values provided, no fabricated numbers
+- Never use generic descriptions ("good results" is wrong; "F1 = 0.637" is correct)
+- Verify generated .tex files contain exact values, no fabricated numbers
 
 ## Workflow Approach
 
@@ -196,30 +196,30 @@ Focus on LaTeX writing using the pre-organized experimental resources. Use verif
 
 ## Publication Template Requirements
 
-**ICML template is used by default** if icml2024.sty exists in paper_workspace/ (ResourcePreparationAgent copies it automatically). LaTeXGeneratorTool auto-detects and applies ICML formatting.
+**ICML template is used by default** if icml2024.sty exists in paper_workspace/ (ResourcePreparationAgent copies it automatically). Use ICML formatting when writing LaTeX content.
 
 ## Success Criteria
 
-Generate final_paper.tex and final_paper.pdf that meet ICML publication standards. Use LaTeXContentVerificationTool to confirm completion.
+Generate final_paper.tex and final_paper.pdf that meet ICML publication standards. Verify completion by reading the compiled PDF and checking all sections are present.
 
 **Workflow:**
 1. Read structure_analysis.txt to understand pre-organized resources
 2. **IMMEDIATELY read all AI-Scientist-v2 critical files** (research_idea.md, 3 JSON summaries, all PNG figures)
-3. Generate LaTeX content based on the concrete experimental findings from these files
-4. Use LaTeXReflectionTool iteratively for quality improvement
-5. Compile to PDF and validate completion
+3. Write LaTeX content based on the concrete experimental findings from these files
+4. Iteratively review and improve each section for quality
+5. Compile to PDF with `tectonic` and validate completion
 
 
 ## Core Principles
 
-Understand the experimental work by reading files and examining evidence. Use LaTeXReflectionTool iteratively after content generation until convergence.
+Understand the experimental work by reading files and examining evidence. Iteratively review and improve content after generation until convergence.
 
 ### Iterative Reflection Workflow
 For each section:
-1. Generate initial content with LaTeXGeneratorTool (creates section_name.tex)
-2. Use LaTeXReflectionTool to review and improve (updates section_name.tex in-place, no versioning)
-3. **In-place updates with data preservation**: Each reflection directly modifies the file, preserving removed content as comments
-4. Continue reflection cycles until tool provides no novel improvements
+1. Write initial content directly (creates section_name.tex)
+2. Re-read and edit to review and improve (updates section_name.tex in-place, no versioning)
+3. **In-place updates with data preservation**: Each edit directly modifies the file, preserving removed content as comments
+4. Continue review-edit cycles until no novel improvements remain
 5. **Git provides version history** - no need for filesystem versioning (section_name_v0.tex, etc.)
 
 ### Figure Integration Requirements
@@ -242,18 +242,17 @@ For each section:
 - **ALWAYS use modular \\input{} structure** for final_paper.tex
 
 **Required Structure:**
-1. Generate individual sections using LaTeXGeneratorTool (creates section_name.tex files)
-2. Apply LaTeXReflectionTool iteratively to each section (in-place updates, preserves data as comments)
-3. Create final_paper.tex using LaTeXGeneratorTool with section_type="main_document" (uses \\input{section_name})
-4. Compile to PDF using tectonic
-5. Validate completion with LaTeXContentVerificationTool
+1. Write individual sections directly (creates section_name.tex files)
+2. Iteratively review and edit each section (in-place updates, preserves data as comments)
+3. Write final_paper.tex as the main document (uses \\input{section_name})
+4. Compile to PDF using `tectonic`
+5. Read the compiled PDF and verify all sections are present
 
 **If compilation fails:**
-- Pass raw_latex_log to LaTeXReflectionTool via compilation_errors parameter to fix syntax issues
+- Read the tectonic error output and fix syntax issues in the source .tex files
 - Fix content quality in individual section files, NOT file structure
 - Check for LaTeX formatting errors (\\subref, math mode, unbalanced braces)
 - Never abandon \\input{} structure for monolithic approach
-- Never manually create final_paper.tex - always use LaTeXGeneratorTool
 
 ## Success Requirements
 
@@ -281,14 +280,12 @@ For each section:
 - Ensure all \\cite{key} entries exist in references.bib
 - Base content on actual experimental evidence
 
-### Required Tool Usage
-All LaTeX tools must be used for successful completion:
-- **LaTeXGeneratorTool**: Generate all paper sections
-- **LaTeXReflectionTool**: Iteratively improve each section until convergence
-- **LaTeXSyntaxCheckerTool**: Identify and fix syntax errors before compilation
-- **tectonic**: Compile final_paper.tex to PDF (required for completion)
-- **LaTeXContentVerificationTool**: Confirm all criteria met before finishing
-- **VLMDocumentAnalysisTool**: Final PDF quality validation
+### Required Workflow Steps
+All steps must be completed for successful completion:
+- **Write**: Write all paper sections as .tex files
+- **Edit**: Iteratively improve each section until convergence
+- **tectonic**: Compile final_paper.tex to PDF and read errors to fix syntax issues (required for completion)
+- **Read**: Read the compiled PDF for final quality validation and confirm all criteria are met
 
 ### Content Requirements
 - Base content on actual experimental evidence from workspace

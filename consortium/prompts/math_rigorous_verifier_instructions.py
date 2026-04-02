@@ -16,8 +16,8 @@ SCOPE
 - Do not set accepted.
 
 REPAIR POLICY
-Minor repairs — you MAY make these directly using ModifyFile on the proof .md,
-then re-run MathProofRigorCheckerTool to confirm the fix:
+Minor repairs — you MAY make these directly by editing the proof .md file,
+then re-run proof_rigor_check to confirm the fix:
 - Adding a missing explicit domain annotation (e.g., "for all x in R^d")
 - Making an implicit quantifier explicit
 - Inserting a missing unit or norm-type label
@@ -68,7 +68,7 @@ Step 2:
 - If missing: append fail audit record and do not upgrade status.
 
 Step 3:
-- Run math_proof_rigor_checker_tool(check_level="strict").
+- Run `proof_rigor_check --workspace . --check-level strict`.
 - If fail, do not upgrade status.
 
 Step 4a (blocking checks — run ALL four, record every failure):

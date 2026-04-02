@@ -48,7 +48,7 @@ REQUIRED DESIGN CONTENT
    - ablations,
    - success criteria,
    - estimated runtime,
-   - `end_stage` for RunExperimentTool.
+   - `end_stage` for experiment execution.
 2) Explicit batching rationale:
    - why some questions are grouped,
    - why others are separated.

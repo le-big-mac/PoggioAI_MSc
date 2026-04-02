@@ -1,13 +1,15 @@
 """
 MathRigorousVerifierAgent — LangGraph node module.
 
-Completion-based: reads proofs + claim graph, outputs rigor audit.
+Audits proof rigor and symbolic completeness. Needs tool access to
+update claim statuses via claim_graph (set_status to promote/demote).
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable, List, Optional
 
+from ..agents.base_agent import create_specialist_agent
 from ..prompts.math_rigorous_verifier_instructions import get_math_rigorous_verifier_system_prompt
 
 
@@ -30,15 +32,23 @@ ADVERSARIAL RULES
 - Verify that all cited lemmas/theorems are applicable (correct hypotheses satisfied).
 
 OUTPUT STANDARD (ADVERSARIAL MODE)
-For each claim audited, produce a structured verdict with:
-- verdict: "invalidated" or "survived"
-- critical_issues: list of {location, description, why_invalid}
-- major_issues: list
-- recommendation: "return_to_prover" | "proceed_with_caution" | "reject_claim"
+For each claim audited, append to checks/<claim_id>.jsonl:
+{
+  "agent": "math_rigorous_verifier_agent_adversarial",
+  "check_kind": "adversarial_audit",
+  "verdict": "invalidated" | "survived",
+  "critical_issues": [
+    {"location": "Step N", "description": "...", "why_invalid": "..."}
+  ],
+  "major_issues": [...],
+  "recommendation": "return_to_prover" | "proceed_with_caution" | "reject_claim"
+}
 
 STATUS RULES (ADVERSARIAL MODE):
-- verdict=invalidated: set status to proved_draft (block verified_symbolic).
+- verdict=invalidated: use claim_graph --action set_status to set status to proved_draft.
 - verdict=survived: adversarial audit satisfied — standard verification may proceed.
+
+After auditing all claims, write math_workspace/adversarial_audit_summary.md.
 """
 
 
@@ -49,6 +59,7 @@ def build_node(
     adversarial: bool = False,
     **cfg: Any,
 ) -> Callable:
+    tools = []
     if adversarial:
         from ..prompts.system_prompt_template import build_system_prompt
         system_prompt = build_system_prompt(
@@ -58,31 +69,18 @@ def build_node(
         )
     else:
         system_prompt = get_math_rigorous_verifier_system_prompt(tools=[], managed_agents=None)
-
-    agent_name = "math_rigorous_verifier_agent"
     counsel_models = cfg.get("counsel_models")
+    agent_name = "math_rigorous_verifier_agent"
     if counsel_models is not None:
         from ..counsel import create_counsel_node
-        return create_counsel_node(system_prompt, [], agent_name, workspace_dir, counsel_models)
-
-    from .completion_node import create_completion_node
-    return create_completion_node(
+        return create_counsel_node(system_prompt, tools, agent_name, workspace_dir, counsel_models)
+    return create_specialist_agent(
+        model=model,
+        tools=tools,
         system_prompt=system_prompt,
         agent_name=agent_name,
-        workspace_dir=workspace_dir or "",
-        input_files=[
-            "math_workspace/claim_graph.json",
-            "math_workspace/proofs/proofs.md",
-            "paper_workspace/research_goals.json",
-        ],
-        output_files=[
-            "math_workspace/verification_audit.md",
-            "math_workspace/claim_graph.json",
-        ],
+        workspace_dir=workspace_dir,
         mandatory_artifacts=[
-            "math_workspace/verification_audit.md",
+            "math_workspace/claim_graph.json",
         ],
-        backend=model.backend,
-        model=model.model,
-        timeout=model.timeout_seconds,
     )
