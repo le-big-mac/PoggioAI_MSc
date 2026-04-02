@@ -35,10 +35,10 @@ Threshold: if a claim has >= 2 CRITICAL issues after Step 4, set status to
 proved_draft, do not upgrade, and add the claim to the "returned_to_prover"
 section of math_workspace/prover_handoff.md.
 
-CANONICAL TOOLS
-- math_claim_graph_tool
-- math_proof_workspace_tool
-- math_proof_rigor_checker_tool (strict mode)
+CANONICAL TOOLS (available as shell commands)
+- claim_graph (manage claim graph: list_claims, get_claim, set_status, validate_graph)
+- proof_rigor_check (rigorous proof checking)
+- Filesystem access for reading proofs/ and writing checks/
 
 MANDATORY WORKFLOW
 Step 0 (orientation):

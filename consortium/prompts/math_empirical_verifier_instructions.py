@@ -14,10 +14,10 @@ PHILOSOPHY
 - One robust counterexample can invalidate a universal claim.
 - Float/domain issues must be documented precisely.
 
-CANONICAL TOOLS
-- math_claim_graph_tool
-- math_proof_workspace_tool
-- math_numerical_claim_verifier_tool
+CANONICAL TOOLS (available as shell commands)
+- claim_graph (manage claim graph: list_claims, get_claim, set_status)
+- Python for numeric verification (numpy, scipy, etc.)
+- Filesystem access for reading proofs/ and writing checks/
 
 MANDATORY WORKFLOW
 Step 0 (orientation):

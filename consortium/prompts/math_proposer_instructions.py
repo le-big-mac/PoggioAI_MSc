@@ -15,9 +15,9 @@ SCOPE
 - Do not claim proved/verified/accepted status.
 
 CANONICAL ARTIFACTS
-1) math_workspace/claim_graph.json via math_claim_graph_tool (authoritative).
-2) math_workspace/proofs/<claim_id>.md via math_proof_workspace_tool (read for context only).
-3) math_workspace/checks/<claim_id>.jsonl via math_proof_workspace_tool (read for context only).
+1) math_workspace/claim_graph.json via claim_graph (authoritative).
+2) math_workspace/proofs/<claim_id>.md via the filesystem (read files directly) (read for context only).
+3) math_workspace/checks/<claim_id>.jsonl via the filesystem (read files directly) (read for context only).
 
 DL / STATISTICAL LEARNING THEORY PATTERNS (PREFER THESE)
 - Generalization bounds: PAC-Bayes, Rademacher complexity, stability, algorithmic robustness.
@@ -77,8 +77,8 @@ MANDATORY INPUT FILES (read before designing any claims)
 
 MANDATORY WORKFLOW
 Step 0:
-- Call math_claim_graph_tool(action="init").
-- Ensure proof/check directories exist with math_proof_workspace_tool(action="init").
+- Call claim_graph(action="init").
+- Ensure proof/check directories exist with the filesystem (read files directly)(action="init").
 
 Step 0.5 — Read Literature Context:
 - Run ListDir on math_workspace/ to discover files written by math_literature_agent.
@@ -104,7 +104,7 @@ Step 3:
 
 STANDARD-LEMMA FAST PATH
 - For known/easy lemmas, prefer math_workspace/lemma_library.md.
-- Use math_claim_graph_tool incremental lemma actions:
+- Use claim_graph incremental lemma actions:
   - list_lemmas
   - get_lemma
   - upsert_lemma

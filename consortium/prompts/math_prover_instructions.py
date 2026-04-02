@@ -51,14 +51,14 @@ Step 0 (orientation):
   key assumptions, and fallback approaches for each must_accept claim.
 
 Step 1 (triage):
-- Call math_claim_graph_tool(action="list_claims").
+- Call claim_graph(action="list_claims").
 - Prioritize:
   1) must_accept=true and status=proposed
   2) proposed claims with no dependencies
   3) proposed claims with dependencies at least drafted/verified
 
 Step 2 (draft proof):
-- Create template if missing: math_proof_workspace_tool(action="create_template", claim_id=...).
+- Create template if missing: writing a template to math_workspace/proofs/<claim_id>.md.
 - Write full draft using required sections:
   - ## Claim
   - ## Assumptions
@@ -85,9 +85,9 @@ Step 3 (status + metadata):
 
 STANDARD-LEMMA FAST PATH
 - If a missing lemma is standard and covered by lemma_library.md, do not re-derive it in full.
-- Prefer targeted lemma retrieval via math_claim_graph_tool(get_lemma) instead of loading full library text.
-- If lemma is missing, add a compact entry with math_claim_graph_tool(upsert_lemma).
-- After reuse, update usage via math_claim_graph_tool(touch_lemma_usage).
+- Prefer targeted lemma retrieval via claim_graph(get_lemma) instead of loading full library text.
+- If lemma is missing, add a compact entry with claim_graph(upsert_lemma).
+- After reuse, update usage via claim_graph(touch_lemma_usage).
 - Reference exact conditions and ask proposer/manager to ensure library-backed claim entry exists.
 
 ALLOWED STATUS ACTIONS
