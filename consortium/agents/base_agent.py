@@ -22,6 +22,7 @@ def create_specialist_agent(
     system_prompt: str,
     agent_name: str,
     workspace_dir: Optional[str] = None,
+    mandatory_artifacts: Optional[List[str]] = None,
 ) -> Callable:
     """
     Build a CLI agent node for a specialist.
@@ -50,4 +51,5 @@ def create_specialist_agent(
         workspace_dir=workspace_dir or "",
         model=model.model,
         timeout_seconds=model.timeout_seconds,
+        mandatory_artifacts=mandatory_artifacts,
     )

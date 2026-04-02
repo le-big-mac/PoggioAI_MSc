@@ -30,4 +30,7 @@ def build_node(
         system_prompt=system_prompt,
         agent_name="proof_transcription_agent",
         workspace_dir=workspace_dir,
+        mandatory_artifacts=[
+            "paper_workspace/theory_sections.tex",
+        ],
     )

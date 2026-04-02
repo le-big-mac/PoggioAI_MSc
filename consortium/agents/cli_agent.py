@@ -148,6 +148,7 @@ def create_cli_agent(
     model: Optional[str] = None,
     timeout_seconds: int = 3600,
     allowed_tools: Optional[List[str]] = None,
+    mandatory_artifacts: Optional[List[str]] = None,
 ) -> Callable:
     """
     Build a LangGraph node that runs a CLI agent as a subprocess.
@@ -231,6 +232,17 @@ def create_cli_agent(
                 )
         except Exception:
             pass  # Never break the pipeline for tracking errors
+
+        # Check mandatory artifacts after agent completes
+        if mandatory_artifacts:
+            missing = [
+                a for a in mandatory_artifacts
+                if not os.path.isfile(os.path.join(workspace_dir, a))
+            ]
+            if missing:
+                raise RuntimeError(
+                    f"[{agent_name}] Missing mandatory artifacts: {missing}"
+                )
 
         return {
             "agent_outputs": {**state.get("agent_outputs", {}), agent_name: output},
