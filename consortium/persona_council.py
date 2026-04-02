@@ -156,7 +156,7 @@ def run_persona_council(
     max_debate_rounds: int = 3,
     synthesis_model: str = DEFAULT_SYNTHESIS_MODEL,
     budget_manager: Optional[Any] = None,
-    timeout_seconds: int = 600,
+    timeout_seconds: int = 1800,
     max_post_vote_retries: int = 1,
     synthesis_prompt_override: Optional[str] = None,
     council_dir: Optional[str] = None,
