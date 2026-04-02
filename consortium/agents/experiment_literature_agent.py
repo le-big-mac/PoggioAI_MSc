@@ -30,4 +30,5 @@ def build_node(
         system_prompt=system_prompt,
         agent_name="experiment_literature_agent",
         workspace_dir=workspace_dir,
+        persist_session=True,
     )

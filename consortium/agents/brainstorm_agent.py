@@ -28,6 +28,7 @@ def build_node(
         system_prompt=system_prompt,
         agent_name="brainstorm_agent",
         workspace_dir=workspace_dir,
+        persist_session=True,
         mandatory_artifacts=[
             "paper_workspace/brainstorm.json",
         ],

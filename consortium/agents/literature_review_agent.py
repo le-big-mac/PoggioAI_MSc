@@ -28,6 +28,7 @@ def build_node(
         system_prompt=system_prompt,
         agent_name="literature_review_agent",
         workspace_dir=workspace_dir,
+        persist_session=True,
         mandatory_artifacts=[
             "paper_workspace/literature_review.tex",
             "paper_workspace/novelty_flags.json",

@@ -28,4 +28,5 @@ def build_node(
         system_prompt=system_prompt,
         agent_name="proofreading_agent",
         workspace_dir=workspace_dir,
+        persist_session=True,
     )

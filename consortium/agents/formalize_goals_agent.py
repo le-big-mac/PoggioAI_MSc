@@ -28,6 +28,7 @@ def build_node(
         system_prompt=system_prompt,
         agent_name="formalize_goals_agent",
         workspace_dir=workspace_dir,
+        persist_session=True,
         mandatory_artifacts=[
             "paper_workspace/research_goals.json",
             "paper_workspace/track_decomposition.json",

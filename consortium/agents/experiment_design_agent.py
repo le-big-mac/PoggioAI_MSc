@@ -30,6 +30,7 @@ def build_node(
         system_prompt=system_prompt,
         agent_name="experiment_design_agent",
         workspace_dir=workspace_dir,
+        persist_session=True,
         mandatory_artifacts=[
             "experiment_workspace/experiment_design.json",
         ],

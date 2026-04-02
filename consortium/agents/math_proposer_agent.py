@@ -32,6 +32,7 @@ def build_node(
         system_prompt=system_prompt,
         agent_name="math_proposer_agent",
         workspace_dir=workspace_dir,
+        persist_session=True,
         mandatory_artifacts=[
             "math_workspace/claim_graph.json",
         ],
