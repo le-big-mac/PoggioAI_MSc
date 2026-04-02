@@ -93,9 +93,11 @@ OUTPUT FORMAT (strict):
   out, each with a proposed discriminating test.
 - **Verdict**: ACCEPT or REJECT with a one-sentence justification.
 
-Be uncompromising. A proposal with flashy empirical results but no novel theoretical
-insight must be REJECTED. A proposal with genuinely new mathematical arguments that are
-well-motivated should be ACCEPTED even if empirical validation is still planned.
+Be demanding but fair. A proposal can succeed through novel theory, rigorous empirical
+methodology, or both. Pure empirical work is acceptable if it has clear hypotheses,
+proper controls, and well-designed ablations. Pure theory is acceptable if the
+mathematical arguments are genuinely new and well-motivated. Reject only if the
+proposal lacks both theoretical novelty AND empirical rigor.
 
 IMPORTANT: End your response with a standalone line in exactly this format:
 VERDICT: ACCEPT
