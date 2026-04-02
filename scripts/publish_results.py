@@ -193,6 +193,23 @@ def _find_pdf(workspace: Path) -> Path | None:
     return None
 
 
+def _find_existing_issue_post(site_repo: Path, issue_number: int) -> str | None:
+    """Return the existing research post filename for an issue, if any."""
+    research_dir = site_repo / "_research"
+    if not research_dir.exists():
+        return None
+
+    needle = f"issue_number: {issue_number}"
+    for path in sorted(research_dir.glob("*.md")):
+        try:
+            text = path.read_text()
+        except OSError:
+            continue
+        if needle in text:
+            return path.name
+    return None
+
+
 def build_post(workspace: Path, site_repo: Path, issue_number: int | None = None) -> tuple[str, str, Path | None]:
     """Build a Jekyll research post from a workspace.
 
@@ -206,7 +223,11 @@ def build_post(workspace: Path, site_repo: Path, issue_number: int | None = None
     title = _extract_title(workspace, metadata)
     date = datetime.now().strftime("%Y-%m-%d")
     slug = _slugify(title)
-    filename = f"{date}-{slug}.md"
+    filename = (
+        _find_existing_issue_post(site_repo, issue_number)
+        if issue_number is not None
+        else None
+    ) or f"{date}-{slug}.md"
 
     task = metadata.get("task_preview", summary.get("task", ""))
     status = "complete" if (workspace / "STATUS.txt").exists() else "in_progress"
