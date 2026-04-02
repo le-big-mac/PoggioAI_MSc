@@ -253,7 +253,7 @@ def _write_experiment_metadata(workspace_dir: str, args, task: str,
         "mode": "cli_agent",
         "cli_backend": cli_backend,
         "cli_model": cli_model,
-        "task_preview": task[:200],
+        "task_preview": task,
         "cli_args": {
             "enable_math_agents": getattr(args, "enable_math_agents", False),
             "output_format": getattr(args, "output_format", "latex"),

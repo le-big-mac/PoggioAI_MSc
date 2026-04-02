@@ -229,7 +229,7 @@ def build_post(workspace: Path, site_repo: Path, issue_number: int | None = None
         else None
     ) or f"{date}-{slug}.md"
 
-    task = metadata.get("task_preview", summary.get("task", ""))
+    task = summary.get("task", "") or metadata.get("task_preview", "")
     status = "complete" if (workspace / "STATUS.txt").exists() else "in_progress"
     verdict = _read_json(str(workspace / "quick_pass_verdict.json"))
 
