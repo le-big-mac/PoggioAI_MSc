@@ -13,6 +13,7 @@ import logging
 import os
 import subprocess
 import time
+import uuid
 from typing import Callable, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,15 @@ logger = logging.getLogger(__name__)
 # so we can separate it from progress/status noise.
 _OUTPUT_START = "<FINAL_OUTPUT>"
 _OUTPUT_END = "</FINAL_OUTPUT>"
+
+
+def _base_env(cli_backend: str, model: Optional[str], agent_name: str) -> dict:
+    env = os.environ.copy()
+    env["CONSORTIUM_ACTIVE_CLI_BACKEND"] = cli_backend
+    if model:
+        env["CONSORTIUM_ACTIVE_CLI_MODEL"] = model
+    env["CONSORTIUM_ACTIVE_AGENT_NAME"] = agent_name
+    return env
 
 
 def _extract_final_output(raw: str) -> str:
@@ -87,7 +97,9 @@ If you produced files, list the key files you created or modified."""
 
 
 def _run_claude(prompt: str, workspace_dir: str, model: Optional[str],
-                timeout: int, allowed_tools: Optional[List[str]] = None) -> subprocess.CompletedProcess:
+                timeout: int, allowed_tools: Optional[List[str]] = None,
+                session_id: Optional[str] = None, resume: bool = False,
+                metadata: Optional[dict] = None, env: Optional[dict] = None) -> subprocess.CompletedProcess:
     """Run Claude Code CLI in print mode."""
     cmd = ["claude", "-p", "--output-format", "text", "--max-turns", "100"]
     if model:
@@ -97,39 +109,52 @@ def _run_claude(prompt: str, workspace_dir: str, model: Optional[str],
     else:
         cmd.extend(["--allowedTools",
                      "Edit,Read,Write,WebFetch,WebSearch,Bash(python*),Bash(curl*),Bash(ls*),Bash(cat*),Bash(grep*),Bash(find*),Bash(cd*),Bash(mkdir*),Bash(cp*),Bash(mv*),Bash(pip*),Bash(tectonic*),Glob,Grep"])
+    if resume and session_id:
+        cmd.extend(["--resume", session_id])
+    elif session_id:
+        cmd.extend(["--session-id", session_id])
 
     return subprocess.run(
         cmd, input=prompt, capture_output=True, text=True,
         cwd=workspace_dir, timeout=timeout,
-        env=os.environ.copy(),
+        env=env or os.environ.copy(),
     )
 
 
 def _run_codex(prompt: str, workspace_dir: str, model: Optional[str],
-               timeout: int) -> subprocess.CompletedProcess:
+               timeout: int, session_id: Optional[str] = None,
+               resume: bool = False, metadata: Optional[dict] = None,
+               env: Optional[dict] = None) -> subprocess.CompletedProcess:
     """Run OpenAI Codex CLI in full-auto mode."""
-    cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
+    if resume and session_id:
+        cmd = ["codex", "exec", "resume", session_id, "--dangerously-bypass-approvals-and-sandbox"]
+    else:
+        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
     if model:
         cmd.extend(["--model", model])
 
     return subprocess.run(
         cmd, input=prompt, capture_output=True, text=True,
         cwd=workspace_dir, timeout=timeout,
-        env=os.environ.copy(),
+        env=env or os.environ.copy(),
     )
 
 
 def _run_gemini(prompt: str, workspace_dir: str, model: Optional[str],
-                timeout: int) -> subprocess.CompletedProcess:
+                timeout: int, session_id: Optional[str] = None,
+                resume: bool = False, metadata: Optional[dict] = None,
+                env: Optional[dict] = None) -> subprocess.CompletedProcess:
     """Run Gemini CLI."""
     cmd = ["gemini", "--approval-mode", "yolo"]
     if model:
         cmd.extend(["--model", model])
+    if resume:
+        cmd.extend(["--resume", "latest"])
 
     return subprocess.run(
         cmd, input=prompt, capture_output=True, text=True,
         cwd=workspace_dir, timeout=timeout,
-        env=os.environ.copy(),
+        env=env or os.environ.copy(),
     )
 
 
@@ -149,6 +174,7 @@ def create_cli_agent(
     timeout_seconds: int = 3600,
     allowed_tools: Optional[List[str]] = None,
     mandatory_artifacts: Optional[List[str]] = None,
+    persist_session: bool = False,
 ) -> Callable:
     """
     Build a LangGraph node that runs a CLI agent as a subprocess.
@@ -178,30 +204,55 @@ def create_cli_agent(
     def node_fn(state: dict) -> dict:
         task = state.get("agent_task") or state.get("task", "")
         prompt = _build_prompt(system_prompt, task, workspace_dir, agent_name)
+        sessions = dict(state.get("_cli_agent_sessions") or {})
+        supports_resume = cli_backend in {"claude", "codex"}
+        use_session = persist_session and supports_resume
+        session_id = sessions.get(agent_name)
+        is_resume = bool(session_id)
+        if use_session and cli_backend == "claude" and session_id is None:
+            session_id = str(uuid.uuid4())
+            sessions[agent_name] = session_id
 
         logger.info(
-            "[CLI Agent] %s starting — backend=%s model=%s cwd=%s",
-            agent_name, cli_backend, model, workspace_dir,
+            "[CLI Agent] %s starting — backend=%s model=%s cwd=%s resume=%s",
+            agent_name, cli_backend, model, workspace_dir, is_resume,
         )
         t0 = time.time()
+        meta: dict = {}
+        env = _base_env(cli_backend, model, agent_name)
 
         try:
             if cli_backend == "claude":
-                result = runner(prompt, workspace_dir, model, timeout_seconds, allowed_tools)
+                result = runner(
+                    prompt, workspace_dir, model, timeout_seconds,
+                    allowed_tools, session_id=session_id, resume=is_resume, metadata=meta, env=env,
+                )
             else:
-                result = runner(prompt, workspace_dir, model, timeout_seconds)
+                result = runner(
+                    prompt, workspace_dir, model, timeout_seconds,
+                    session_id=session_id, resume=is_resume, metadata=meta, env=env,
+                )
         except subprocess.TimeoutExpired:
             output = (
                 f"[{agent_name}] CLI agent timed out after {timeout_seconds}s. "
                 f"Backend: {cli_backend}, model: {model}"
             )
             logger.error(output)
-            return {
+            result_state = {
                 "agent_outputs": {**state.get("agent_outputs", {}), agent_name: output},
                 "agent_task": None,
             }
+            if use_session:
+                result_state["_cli_agent_sessions"] = sessions
+            return result_state
 
         elapsed = time.time() - t0
+
+        if cli_backend == "codex" and result.stderr:
+            from ..cli_completion import extract_session_id
+            real_session = extract_session_id(result.stderr)
+            if real_session:
+                sessions[agent_name] = real_session
 
         if result.returncode != 0:
             stderr_snippet = (result.stderr or "")[:2000]
@@ -226,6 +277,7 @@ def create_cli_agent(
                     agent_name=agent_name,
                     backend=cli_backend,
                     model=model or "default",
+                    resumed=is_resume,
                     duration_seconds=elapsed,
                     prompt_chars=len(prompt),
                     output_chars=len(output),
@@ -244,10 +296,13 @@ def create_cli_agent(
                     f"[{agent_name}] Missing mandatory artifacts: {missing}"
                 )
 
-        return {
+        result_state = {
             "agent_outputs": {**state.get("agent_outputs", {}), agent_name: output},
             "agent_task": None,
         }
+        if use_session:
+            result_state["_cli_agent_sessions"] = sessions
+        return result_state
 
     node_fn.__name__ = agent_name
     return node_fn

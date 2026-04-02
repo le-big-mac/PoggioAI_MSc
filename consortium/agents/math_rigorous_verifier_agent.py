@@ -11,6 +11,7 @@ from typing import Any, Callable, List, Optional
 
 from ..agents.base_agent import create_specialist_agent
 from ..prompts.math_rigorous_verifier_instructions import get_math_rigorous_verifier_system_prompt
+from ..prompts.workspace_management import WORKSPACE_GUIDANCE
 
 
 ADVERSARIAL_SYSTEM_PROMPT_PREFIX = """Your agent_name is "math_rigorous_verifier_agent" (ADVERSARIAL MODE).
@@ -65,6 +66,7 @@ def build_node(
         system_prompt = build_system_prompt(
             tools=[],
             instructions=ADVERSARIAL_SYSTEM_PROMPT_PREFIX,
+            workspace_guidance=WORKSPACE_GUIDANCE,
             managed_agents=None,
         )
     else:

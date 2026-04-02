@@ -1,47 +1,43 @@
 """
-Tests for consortium/runner.py — utility functions (no real API calls).
+Tests for consortium/runner.py in CLI-agent mode.
 """
 
 import json
-import os
-import pytest
 from datetime import datetime
 from unittest.mock import patch
 
 
-class TestValidateApiKeys:
-    def test_no_error_when_key_set(self, monkeypatch):
-        from consortium.runner import _validate_api_keys
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-        errors = _validate_api_keys("claude-opus-4-6")
-        assert errors == []
+class TestValidateCliTools:
+    def test_no_error_when_binary_exists(self):
+        from consortium.runner import _validate_cli_tools
 
-    def test_error_when_anthropic_key_missing(self, monkeypatch):
-        from consortium.runner import _validate_api_keys
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        errors = _validate_api_keys("claude-opus-4-6")
+        with patch("consortium.runner.subprocess.run") as run:
+            run.return_value = None
+            assert _validate_cli_tools("claude") == []
+
+    def test_error_when_binary_missing(self):
+        from consortium.runner import _validate_cli_tools
+
+        with patch("consortium.runner.subprocess.run", side_effect=FileNotFoundError):
+            errors = _validate_cli_tools("codex")
         assert len(errors) == 1
-        assert "ANTHROPIC_API_KEY" in errors[0]
+        assert "codex" in errors[0]
 
-    def test_error_when_openai_key_missing(self, monkeypatch):
-        from consortium.runner import _validate_api_keys
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        errors = _validate_api_keys("gpt-5")
-        assert len(errors) == 1
-        assert "OPENAI_API_KEY" in errors[0]
 
-    def test_no_error_when_openai_key_set(self, monkeypatch):
-        from consortium.runner import _validate_api_keys
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-        errors = _validate_api_keys("gpt-5")
-        assert errors == []
+class TestCollectRequiredCliBackends:
+    def test_collects_default_and_overrides(self):
+        from consortium.runner import _collect_required_cli_backends
+        from consortium.utils import CLIBackendRegistry, CLIBackendSpec
 
-    def test_gemini_requires_google_key(self, monkeypatch):
-        from consortium.runner import _validate_api_keys
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        errors = _validate_api_keys("gemini-2.5-pro")
-        assert len(errors) == 1
-        assert "GOOGLE_API_KEY" in errors[0]
+        registry = CLIBackendRegistry(
+            default=CLIBackendSpec(backend="claude", model="claude-opus-4-6"),
+            agent_overrides={
+                "math_prover_agent": CLIBackendSpec(backend="codex", model="gpt-5.4"),
+                "reviewer_agent": CLIBackendSpec(backend="gemini", model="gemini-2.5-pro"),
+            },
+        )
+
+        assert _collect_required_cli_backends(registry) == ["claude", "codex", "gemini"]
 
 
 class TestListRuns:
@@ -59,18 +55,19 @@ class TestListRuns:
         out = capsys.readouterr().out
         assert "No past runs" in out
 
-    def test_lists_workspace_with_budget_state(self, tmp_path, capsys):
+    def test_lists_workspace_with_cli_budget_state(self, tmp_path, capsys):
         from consortium.runner import _list_runs
+
         ws = tmp_path / "consortium_20260101_120000"
         ws.mkdir()
-        (ws / "budget_state.json").write_text(json.dumps({"total_usd": 5.42}))
+        (ws / "cli_budget_state.json").write_text(json.dumps({"total_seconds": 91}))
         (ws / "STATUS.txt").write_text("COMPLETE")
-        summary = {"task": "Test research task about neural networks"}
-        (ws / "run_summary.json").write_text(json.dumps(summary))
+        (ws / "run_summary.json").write_text(json.dumps({"task": "Test research task"}))
+
         _list_runs(str(tmp_path))
         out = capsys.readouterr().out
         assert "consortium_20260101_120000" in out
-        assert "$5.42" in out
+        assert "91s" in out
         assert "COMPLETE" in out
 
 
@@ -80,19 +77,23 @@ class TestWriteExperimentMetadata:
 
         class FakeArgs:
             enable_math_agents = False
-            enable_counsel = False
             output_format = "latex"
             enforce_paper_artifacts = False
             min_review_score = 8
 
-        _write_experiment_metadata(str(tmp_path), FakeArgs(), "claude-opus-4-6", "Test task")
+        _write_experiment_metadata(
+            str(tmp_path),
+            FakeArgs(),
+            "Test task",
+            "claude",
+            "claude-opus-4-6",
+        )
         meta_path = tmp_path / "experiment_metadata.json"
         assert meta_path.exists()
-        with open(meta_path) as f:
-            meta = json.load(f)
-        assert meta["model"] == "claude-opus-4-6"
-        assert "git_commit" in meta
-        assert "python_version" in meta
+        meta = json.loads(meta_path.read_text())
+        assert meta["mode"] == "cli_agent"
+        assert meta["cli_backend"] == "claude"
+        assert meta["cli_model"] == "claude-opus-4-6"
         assert meta["cli_args"]["enable_math_agents"] is False
 
     def test_task_preview_truncated(self, tmp_path):
@@ -100,15 +101,18 @@ class TestWriteExperimentMetadata:
 
         class FakeArgs:
             enable_math_agents = False
-            enable_counsel = False
             output_format = "markdown"
             enforce_paper_artifacts = False
             min_review_score = 8
 
-        long_task = "x" * 500
-        _write_experiment_metadata(str(tmp_path), FakeArgs(), "gpt-5", long_task)
-        with open(tmp_path / "experiment_metadata.json") as f:
-            meta = json.load(f)
+        _write_experiment_metadata(
+            str(tmp_path),
+            FakeArgs(),
+            "x" * 500,
+            "codex",
+            "gpt-5.4",
+        )
+        meta = json.loads((tmp_path / "experiment_metadata.json").read_text())
         assert len(meta["task_preview"]) <= 200
 
 
@@ -120,23 +124,31 @@ class TestWriteRunSummary:
         _write_run_summary(
             workspace_dir=str(tmp_path),
             task="Test task",
-            model_name="claude-opus-4-6",
+            cli_backend="claude",
+            cli_model="claude-opus-4-6",
             start_time=start,
-            stages_completed=["ideation_agent", "literature_review_agent"],
+            stages_completed=["literature_review_agent", "brainstorm_agent"],
         )
-        summary_path = tmp_path / "run_summary.json"
-        assert summary_path.exists()
-        with open(summary_path) as f:
-            summary = json.load(f)
+        summary = json.loads((tmp_path / "run_summary.json").read_text())
         assert summary["task"] == "Test task"
-        assert summary["model"] == "claude-opus-4-6"
-        assert "ideation_agent" in summary["stages_completed"]
+        assert summary["mode"] == "cli_agent"
+        assert summary["cli_backend"] == "claude"
+        assert "brainstorm_agent" in summary["stages_completed"]
         assert summary["duration_seconds"] >= 0
 
-    def test_reads_budget_state_for_cost(self, tmp_path):
+    def test_reads_cli_budget_summary(self, tmp_path):
         from consortium.runner import _write_run_summary
-        (tmp_path / "budget_state.json").write_text(json.dumps({"total_usd": 12.34}))
-        _write_run_summary(str(tmp_path), "task", "gpt-5", datetime.now(), [])
-        with open(tmp_path / "run_summary.json") as f:
-            summary = json.load(f)
-        assert abs(summary["total_cost_usd"] - 12.34) < 1e-6
+
+        (tmp_path / "cli_budget_state.json").write_text(
+            json.dumps({"total_seconds": 120, "max_invocations": 100})
+        )
+        _write_run_summary(
+            str(tmp_path),
+            "task",
+            "gemini",
+            "gemini-2.5-pro",
+            datetime.now(),
+            [],
+        )
+        summary = json.loads((tmp_path / "run_summary.json").read_text())
+        assert summary["cli_budget"]["total_seconds"] == 120

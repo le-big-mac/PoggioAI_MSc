@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 from consortium.cli_completion import cli_completion
 from consortium.tree_search.tree_state import NodeStatus, TreeNode, TreeSearchState
+from consortium.utils import infer_cli_backend
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +60,8 @@ def _llm_promise_score(
         raw = cli_completion(
             user,
             system_prompt=system,
-            backend="claude",
+            backend=infer_cli_backend(model),
+            model=model,
         ).strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1]

@@ -291,8 +291,9 @@ def _execute_branches_parallel(
             f"[TREE SEARCH BRANCH — Strategy: {node.metadata.get('strategy_name', 'default')}]\n\n"
             f"Focus on proving claim '{claim_id}' using the following strategy:\n\n"
             f"{strategy_directive}\n\n"
-            f"Work in the current workspace. Use the math_claim_graph_tool and "
-            f"math_proof_workspace_tool to draft and record your proof. "
+            f"Work in the current workspace. Use the claim graph CLI commands to inspect "
+            f"or update claim state, and write the proof directly under "
+            f"math_workspace/proofs/{claim_id}.md. "
             f"Set the claim status to 'proved_draft' when complete."
         )
 
@@ -435,6 +436,7 @@ def build_tree_search_theory_track(
     summary_model_id: Optional[str] = "claude-sonnet-4-6",
     tree_config: Optional[TreeSearchConfig] = None,
     model_id: str = "claude-sonnet-4-6",
+    model_registry: Optional[Any] = None,
     adversarial_verification: bool = False,
 ) -> Any:
     """Build the theory track subgraph with tree search integration.
@@ -460,6 +462,11 @@ def build_tree_search_theory_track(
     graph = StateGraph(ResearchState)
     counsel_kwargs = {"counsel_models": counsel_models} if counsel_models is not None else {}
 
+    def _m(agent_name: str) -> Any:
+        if model_registry is not None:
+            return model_registry.get(agent_name)
+        return model
+
     def _wrap(node, name):
         return with_pdf_summary(node, name, workspace_dir, summary_model_id)
 
@@ -467,14 +474,14 @@ def build_tree_search_theory_track(
     graph.add_node(
         "math_literature_agent",
         _wrap(
-            build_math_literature_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+            build_math_literature_node(_m("math_literature_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "math_literature_agent",
         ),
     )
     graph.add_node(
         "math_proposer_agent",
         _wrap(
-            build_math_proposer_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+            build_math_proposer_node(_m("math_proposer_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "math_proposer_agent",
         ),
     )
@@ -482,26 +489,17 @@ def build_tree_search_theory_track(
     if tree_config and tree_config.enabled:
         # Build raw agent nodes WITHOUT counsel — counsel is handled
         # dynamically per-branch by the tree controller via descriptors.
-        prover = build_math_prover_node(model, workspace_dir, authorized_imports)
+        prover = build_math_prover_node(_m("math_prover_agent"), workspace_dir, authorized_imports)
         rigorous_verifier = build_math_rigorous_verifier_node(
-            model, workspace_dir, authorized_imports
+            _m("math_rigorous_verifier_agent"), workspace_dir, authorized_imports
         )
         empirical_verifier = build_math_empirical_verifier_node(
-            model, workspace_dir, authorized_imports
+            _m("math_empirical_verifier_agent"), workspace_dir, authorized_imports
         )
 
         # Build agent descriptors for counsel-capable branch execution.
         # Each descriptor carries the get_tools / get_prompt factories so
         # the controller can build fresh, correctly-targeted agents per branch.
-        from consortium.agents.math_prover_agent import (
-            get_tools as prover_get_tools,
-        )
-        from consortium.agents.math_rigorous_verifier_agent import (
-            get_tools as rigorous_get_tools,
-        )
-        from consortium.agents.math_empirical_verifier_agent import (
-            get_tools as empirical_get_tools,
-        )
         from consortium.prompts.math_prover_instructions import (
             get_math_prover_system_prompt,
         )
@@ -515,25 +513,25 @@ def build_tree_search_theory_track(
         prover_desc = _AgentDescriptor(
             agent_name="math_prover_agent",
             get_system_prompt=get_math_prover_system_prompt,
-            get_tools=prover_get_tools,
+            get_tools=lambda _ws: [],
             fallback_node=prover,
-            model=model,
+            model=_m("math_prover_agent"),
             authorized_imports=authorized_imports,
         )
         rigorous_desc = _AgentDescriptor(
             agent_name="math_rigorous_verifier_agent",
             get_system_prompt=get_math_rigorous_verifier_system_prompt,
-            get_tools=rigorous_get_tools,
+            get_tools=lambda _ws: [],
             fallback_node=rigorous_verifier,
-            model=model,
+            model=_m("math_rigorous_verifier_agent"),
             authorized_imports=authorized_imports,
         )
         empirical_desc = _AgentDescriptor(
             agent_name="math_empirical_verifier_agent",
             get_system_prompt=get_math_empirical_verifier_system_prompt,
-            get_tools=empirical_get_tools,
+            get_tools=lambda _ws: [],
             fallback_node=empirical_verifier,
-            model=model,
+            model=_m("math_empirical_verifier_agent"),
             authorized_imports=authorized_imports,
         )
 
@@ -549,7 +547,7 @@ def build_tree_search_theory_track(
             rigorous_verifier_descriptor=rigorous_desc,
             empirical_verifier_descriptor=empirical_desc,
             adversarial_verification=adversarial_verification,
-            adversarial_model=model,
+            adversarial_model=_m("math_rigorous_verifier_agent"),
         )
 
         graph.add_node("tree_search_controller", tree_controller)
@@ -558,21 +556,21 @@ def build_tree_search_theory_track(
         graph.add_node(
             "math_prover_agent",
             _wrap(
-                build_math_prover_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+                build_math_prover_node(_m("math_prover_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
                 "math_prover_agent",
             ),
         )
         graph.add_node(
             "math_rigorous_verifier_agent",
             _wrap(
-                build_math_rigorous_verifier_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+                build_math_rigorous_verifier_node(_m("math_rigorous_verifier_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
                 "math_rigorous_verifier_agent",
             ),
         )
         graph.add_node(
             "math_empirical_verifier_agent",
             _wrap(
-                build_math_empirical_verifier_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+                build_math_empirical_verifier_node(_m("math_empirical_verifier_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
                 "math_empirical_verifier_agent",
             ),
         )
@@ -580,7 +578,7 @@ def build_tree_search_theory_track(
     graph.add_node(
         "proof_transcription_agent",
         _wrap(
-            build_proof_transcription_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+            build_proof_transcription_node(_m("proof_transcription_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "proof_transcription_agent",
         ),
     )

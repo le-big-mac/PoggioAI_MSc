@@ -122,14 +122,15 @@ def cli_completion(
         from .cli_budget import get_global_cli_tracker
         tracker = get_global_cli_tracker()
         if tracker is not None:
-            tracker.record_invocation(
-                agent_name="cli_completion",
-                backend=backend,
-                model=model or "default",
-                duration_seconds=elapsed,
-                prompt_chars=len(full_prompt),
-                output_chars=len(output),
-            )
+                tracker.record_invocation(
+                    agent_name="cli_completion",
+                    backend=backend,
+                    model=model or "default",
+                    resumed=resume,
+                    duration_seconds=elapsed,
+                    prompt_chars=len(full_prompt),
+                    output_chars=len(output),
+                )
     except Exception:
         pass
 

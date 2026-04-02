@@ -68,6 +68,7 @@ def create_completion_node(
     backend: str = "claude",
     model: Optional[str] = None,
     timeout: int = 600,
+    persist_session: bool = False,
 ) -> Callable:
     """Create a LangGraph node that runs via cli_completion.
 
@@ -93,6 +94,14 @@ def create_completion_node(
 
     def node_fn(state: dict) -> dict:
         task = state.get("agent_task") or state.get("task", "")
+        sessions = dict(state.get("_completion_sessions") or {})
+        supports_resume = backend in {"claude", "codex"}
+        use_session = persist_session and supports_resume
+        session_id = sessions.get(agent_name)
+        is_resume = bool(session_id)
+        if use_session and backend == "claude" and session_id is None:
+            session_id = f"{agent_name}-{int(time.time() * 1000)}"
+            sessions[agent_name] = session_id
 
         # Read input files
         file_sections = []
@@ -126,13 +135,19 @@ Expected output files:
         logger.info("[completion] %s starting — backend=%s model=%s", agent_name, backend, model)
         t0 = time.time()
 
+        meta: dict = {}
         output = cli_completion(
             prompt,
             system_prompt=instructions,
             backend=backend,
             model=model,
             timeout=timeout,
+            session_id=session_id,
+            resume=is_resume,
+            metadata=meta,
         )
+        if use_session and backend == "codex" and "session_id" in meta:
+            sessions[agent_name] = meta["session_id"]
 
         elapsed = time.time() - t0
         logger.info("[completion] %s completed in %.1fs — output_len=%d", agent_name, elapsed, len(output))
@@ -172,6 +187,7 @@ Expected output files:
                     agent_name=agent_name,
                     backend=backend,
                     model=model or "default",
+                    resumed=is_resume,
                     duration_seconds=elapsed,
                     prompt_chars=len(prompt),
                     output_chars=len(output),
@@ -179,10 +195,13 @@ Expected output files:
         except Exception:
             pass
 
-        return {
+        result_state = {
             "agent_outputs": {**state.get("agent_outputs", {}), agent_name: output},
             "agent_task": None,
         }
+        if use_session:
+            result_state["_completion_sessions"] = sessions
+        return result_state
 
     node_fn.__name__ = agent_name
     return node_fn

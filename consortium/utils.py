@@ -75,6 +75,20 @@ class CLIBackendRegistry:
         return self._default
 
 
+def infer_cli_backend(model_id: Optional[str], default_backend: str = "claude") -> str:
+    """Infer CLI backend name from a model identifier."""
+    if not model_id:
+        return default_backend
+    mid = str(model_id).lower()
+    if "claude" in mid or "anthropic" in mid:
+        return "claude"
+    if "gpt" in mid or "codex" in mid or mid.startswith(("o1-", "o3-", "o4-")):
+        return "codex"
+    if "gemini" in mid or "google" in mid:
+        return "gemini"
+    return default_backend
+
+
 def create_cli_backend_registry(llm_config: dict) -> CLIBackendRegistry:
     """Build a :class:`CLIBackendRegistry` from the LLM config.
 

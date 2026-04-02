@@ -330,7 +330,7 @@ research_concepts = [
 
 **⏰ TIMEOUT IMPLEMENTATION (MANDATORY)**:
 ```python
-import time
+import subprocess, sys, time
 start_time = time.time()
 MAX_CITATION_TIME = 360  # 6 minutes maximum total
 timeout_per_concept = MAX_CITATION_TIME / len(research_concepts)  # Split evenly
@@ -341,10 +341,11 @@ for concept in research_concepts:
         break
     # Perform citation search with per-concept timeout
     try:
-        citations = citation_search(
-            query=concept,
-            limit=2
-        )
+        cmd = [
+            sys.executable, "-m", "consortium.toolkits.writeup.citation_search_cli",
+            "--query", concept, "--limit", "2", "--source", "both"
+        ]
+        citations = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_per_concept)
         # Process results
     except Exception as e:
         print(f"Citation search failed for '{concept}': {e}")
@@ -363,15 +364,15 @@ for concept in research_concepts:
 **NEVER write raw JSON to references.bib file:**
 ```python
 # WRONG - dumps entire JSON response
-citations = citation_search(query=concept)
+citations = subprocess.run(cmd, capture_output=True, text=True).stdout
 bibtex_entries += citations  # This writes JSON, not BibTeX!
 ```
 
 **ALWAYS extract only the bibtex_entries from JSON:**
 ```python
 # CORRECT - extract clean BibTeX entries
-import json
-citations_json = citation_search(query=concept)
+import json, subprocess
+citations_json = subprocess.run(cmd, capture_output=True, text=True).stdout
 citations_data = json.loads(citations_json)
 for entry in citations_data.get("bibtex_entries", []):
     bibtex_entries += entry + "\n\n"  # Extract actual BibTeX

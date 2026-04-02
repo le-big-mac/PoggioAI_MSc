@@ -184,6 +184,7 @@ def run_experiment_stages(
     model: Optional[str] = None,
     end_stage: int = 4,
     timeout_per_stage: int = 1800,
+    stage_root: Optional[str] = None,
 ) -> str:
     """Run an experiment through forced sequential stages.
 
@@ -204,7 +205,7 @@ def run_experiment_stages(
     """
     import uuid as _uuid
 
-    experiment_dir = os.path.join(workspace_dir, "experiment_workspace")
+    experiment_dir = stage_root or os.path.join(workspace_dir, "experiment_workspace")
     os.makedirs(experiment_dir, exist_ok=True)
 
     # Save the idea spec for reference
@@ -270,6 +271,7 @@ def run_experiment_stages(
                     agent_name=f"experiment_{stage['name']}",
                     backend=backend,
                     model=model or "default",
+                    resumed=not is_first,
                     duration_seconds=elapsed,
                     prompt_chars=len(prompt),
                     output_chars=len(output),

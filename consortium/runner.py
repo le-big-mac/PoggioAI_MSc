@@ -329,6 +329,14 @@ def _validate_cli_tools(backend: str) -> list[str]:
     return errors
 
 
+def _collect_required_cli_backends(cli_registry) -> list[str]:
+    """Return the sorted set of CLI backends referenced by the current config."""
+    backends = {cli_registry.default_spec.backend}
+    for spec in getattr(cli_registry, "_overrides", {}).values():
+        backends.add(spec.backend)
+    return sorted(b for b in backends if b)
+
+
 def main():
     args = parse_arguments()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -384,8 +392,10 @@ def main():
     default_spec = cli_registry.default_spec
     print(f"CLI agent mode — backend: {default_spec.backend}, model: {default_spec.model}")
 
-    # Validate CLI tool is installed
-    cli_errors = _validate_cli_tools(default_spec.backend)
+    # Validate all configured CLI tools are installed
+    cli_errors = []
+    for backend in _collect_required_cli_backends(cli_registry):
+        cli_errors.extend(_validate_cli_tools(backend))
     if cli_errors:
         for err in cli_errors:
             print(f"[ERROR] {err}")

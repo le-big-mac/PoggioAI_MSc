@@ -488,6 +488,7 @@ def build_research_graph_quick(config: "ResearchGraphConfig"):
     checkpointer = config.checkpointer
     cli_backend_registry = config.cli_backend_registry
     lit_review_max_attempts = config.artifacts.lit_review_max_attempts
+    assessment_spec = cli_backend_registry.default_spec
 
     persona_council_specs = config.persona_council.specs
     persona_debate_rounds = config.persona_council.debate_rounds
@@ -518,7 +519,12 @@ def build_research_graph_quick(config: "ResearchGraphConfig"):
             build_literature_review_node(_m("literature_review_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "literature_review_agent",
         ),
-        "lit_review_gate": build_lit_review_gate_node(workspace_dir, max_attempts=1),
+        "lit_review_gate": build_lit_review_gate_node(
+            workspace_dir,
+            max_attempts=1,
+            assessment_backend=assessment_spec.backend,
+            assessment_model=assessment_spec.model,
+        ),
         "brainstorm_agent": _wrap(
             build_brainstorm_node(_m("brainstorm_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "brainstorm_agent",
@@ -1547,7 +1553,12 @@ def _build_brainstorm_novelty_directive(novelty_data: dict) -> str:
     return "\n".join(lines)
 
 
-def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any:
+def build_lit_review_gate_node(
+    workspace_dir: str,
+    max_attempts: int = 2,
+    assessment_backend: str = "claude",
+    assessment_model: Optional[str] = None,
+) -> Any:
     """Gate after lit review: checks novelty flags then feasibility.
 
     Routes to:
@@ -1691,7 +1702,9 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
         try:
             from .cli_completion import cli_completion
             raw = cli_completion(
-                prompt, backend="claude",
+                prompt,
+                backend=assessment_backend,
+                model=assessment_model,
                 session_id=gate_session, resume=is_gate_retry,
             )
             raw = _re.sub(r"^```(?:json)?\s*", "", raw.strip())
@@ -1749,7 +1762,11 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
     return lit_review_gate_node
 
 
-def build_verify_completion_node(workspace_dir: str) -> Any:
+def build_verify_completion_node(
+    workspace_dir: str,
+    assessment_backend: str = "claude",
+    assessment_model: Optional[str] = None,
+) -> Any:
     """Verify whether formalized research goals have been met by track execution.
 
     Three-way routing with progress vetting on re-entry:
@@ -1882,7 +1899,9 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
         try:
             from .cli_completion import cli_completion
             raw = cli_completion(
-                prompt, backend="claude",
+                prompt,
+                backend=assessment_backend,
+                model=assessment_model,
                 session_id=verify_session, resume=is_verify_retry,
             )
             raw = _re.sub(r"^```(?:json)?\s*", "", raw.strip())
@@ -2220,6 +2239,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
 
     counsel_kwargs = {}
     cli_backend_registry = config.cli_backend_registry
+    assessment_spec = cli_backend_registry.default_spec
 
     def _m(agent_name: str) -> Any:
         """Resolve the CLI backend spec for *agent_name*."""
@@ -2243,6 +2263,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
                 summary_model_id=summary_model_id,
                 tree_config=tree_search_config,
                 adversarial_verification=adversarial_verification,
+                model_registry=cli_backend_registry,
             )
         else:
             theory_subgraph = build_theory_track_subgraph(
@@ -2268,6 +2289,7 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
             summary_model_id=summary_model_id,
             tree_config=tree_search_config,
             adversarial_verification=adversarial_verification,
+            model_registry=cli_backend_registry,
         )
     else:
         experiment_subgraph = build_experiment_track_subgraph(
@@ -2293,7 +2315,12 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
             build_literature_review_node(_m("literature_review_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "literature_review_agent",
         ),
-        "lit_review_gate": build_lit_review_gate_node(workspace_dir, max_attempts=lit_review_max_attempts),
+        "lit_review_gate": build_lit_review_gate_node(
+            workspace_dir,
+            max_attempts=lit_review_max_attempts,
+            assessment_backend=assessment_spec.backend,
+            assessment_model=assessment_spec.model,
+        ),
         "brainstorm_agent": _wrap(
             build_brainstorm_node(_m("brainstorm_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "brainstorm_agent",
@@ -2316,7 +2343,11 @@ def build_research_graph_v2(config: "ResearchGraphConfig"):
         "experiment_track": build_track_subgraph_node(experiment_subgraph, "experiment_track_status"),
         "track_merge": build_track_merge_node(workspace_dir=workspace_dir),
         # Post-track verification (new v2 gates)
-        "verify_completion": build_verify_completion_node(workspace_dir),
+        "verify_completion": build_verify_completion_node(
+            workspace_dir,
+            assessment_backend=assessment_spec.backend,
+            assessment_model=assessment_spec.model,
+        ),
         "formalize_results_agent": _wrap(
             _formalize_results_state_mapper(
                 build_formalize_results_node(_m("formalize_results_agent"), workspace_dir, authorized_imports, **counsel_kwargs)

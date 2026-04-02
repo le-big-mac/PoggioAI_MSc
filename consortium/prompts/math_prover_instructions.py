@@ -51,7 +51,7 @@ Step 0 (orientation):
   key assumptions, and fallback approaches for each must_accept claim.
 
 Step 1 (triage):
-- Call claim_graph(action="list_claims").
+- Run the `claim_graph` command shown above with `--action list_claims`.
 - Prioritize:
   1) must_accept=true and status=proposed
   2) proposed claims with no dependencies
@@ -85,9 +85,10 @@ Step 3 (status + metadata):
 
 STANDARD-LEMMA FAST PATH
 - If a missing lemma is standard and covered by lemma_library.md, do not re-derive it in full.
-- Prefer targeted lemma retrieval via claim_graph(get_lemma) instead of loading full library text.
-- If lemma is missing, add a compact entry with claim_graph(upsert_lemma).
-- After reuse, update usage via claim_graph(touch_lemma_usage).
+- Prefer targeted lemma retrieval via the `claim_graph` command with `--action get_lemma`
+  instead of loading full library text.
+- If lemma is missing, add a compact entry via `claim_graph --action upsert_lemma`.
+- After reuse, update usage via `claim_graph --action touch_lemma_usage`.
 - Reference exact conditions and ask proposer/manager to ensure library-backed claim entry exists.
 
 ALLOWED STATUS ACTIONS

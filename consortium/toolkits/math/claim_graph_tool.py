@@ -490,7 +490,7 @@ class MathClaimGraphTool:
         lines.append("# Standard Lemma Library (Math Fast Path)")
         lines.append("")
         lines.append("This file is synchronized from `lemma_library_index.json`.")
-        lines.append("Use `math_claim_graph_tool` lemma actions for incremental updates:")
+        lines.append("Use the claim graph CLI lemma actions for incremental updates:")
         lines.append("- `list_lemmas`")
         lines.append("- `get_lemma`")
         lines.append("- `upsert_lemma`")

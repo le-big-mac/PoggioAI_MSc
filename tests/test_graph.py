@@ -9,8 +9,8 @@ class TestBuildPipelineStagesV2:
     def test_base_pipeline_stage_count(self):
         from consortium.graph import build_pipeline_stages_v2
         stages = build_pipeline_stages_v2(enable_math_agents=False)
-        # PRE_TRACK(4) + EXPERIMENT(5) + POST_TRACK(5) = 14
-        assert len(stages) == 14
+        # PRE_TRACK(6) + EXPERIMENT(5) + POST_TRACK(5) = 16
+        assert len(stages) == 16
 
     def test_base_pipeline_starts_with_persona_council(self):
         from consortium.graph import build_pipeline_stages_v2
@@ -25,8 +25,8 @@ class TestBuildPipelineStagesV2:
     def test_math_pipeline_has_twenty_stages(self):
         from consortium.graph import build_pipeline_stages_v2
         stages = build_pipeline_stages_v2(enable_math_agents=True)
-        # PRE_TRACK(4) + MATH(6) + EXPERIMENT(5) + POST_TRACK(5) = 20
-        assert len(stages) == 20
+        # PRE_TRACK(6) + MATH(6) + EXPERIMENT(5) + POST_TRACK(5) = 22
+        assert len(stages) == 22
 
     def test_math_stages_before_experiment_stages(self):
         from consortium.graph import build_pipeline_stages_v2
@@ -68,7 +68,9 @@ class TestBuildPipelineStagesV2:
         assert stages[0] == "persona_council"
         assert stages[1] == "literature_review_agent"
         assert stages[2] == "brainstorm_agent"
-        assert stages[3] == "formalize_goals_agent"
+        assert stages[3] == "formalize_goals_entry"
+        assert stages[4] == "formalize_goals_agent"
+        assert stages[5] == "research_plan_writeup_agent"
 
 
 class TestStageAliases:

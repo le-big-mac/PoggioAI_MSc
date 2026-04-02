@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from ..cli_completion import cli_completion
+from ..utils import infer_cli_backend
 
 
 @dataclass
@@ -122,7 +123,8 @@ def generate_proof_strategies(
     raw = cli_completion(
         user_msg,
         system_prompt=_PROOF_STRATEGY_SYSTEM.format(n=n),
-        backend="claude",
+        backend=infer_cli_backend(model),
+        model=model,
     ).strip()
     # Strip markdown fences if present
     if raw.startswith("```"):

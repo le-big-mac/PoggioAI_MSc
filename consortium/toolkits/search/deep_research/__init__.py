@@ -1,0 +1,2 @@
+"""Deep research compatibility package."""
+

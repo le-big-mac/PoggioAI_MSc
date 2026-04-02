@@ -21,7 +21,7 @@ def main():
             claim_id=args.claim_id,
             proof_text=args.proof_text,
             check_level=args.check_level,
-            workspace_subdir=".",
+            workspace_subdir="math_workspace",
         )
         print(result)
     except Exception as e:

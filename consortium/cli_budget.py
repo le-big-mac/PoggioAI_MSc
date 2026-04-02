@@ -28,6 +28,7 @@ class CLIInvocationRecord:
     agent_name: str
     backend: str
     model: str
+    resumed: bool
     duration_seconds: float
     prompt_chars: int
     output_chars: int
@@ -104,6 +105,7 @@ class CLIBudgetTracker:
                     "agent_name": record.agent_name,
                     "backend": record.backend,
                     "model": record.model,
+                    "resumed": record.resumed,
                     "duration_seconds": record.duration_seconds,
                     "prompt_chars": record.prompt_chars,
                     "output_chars": record.output_chars,
@@ -129,6 +131,7 @@ class CLIBudgetTracker:
         agent_name: str,
         backend: str,
         model: str,
+        resumed: bool,
         duration_seconds: float,
         prompt_chars: int,
         output_chars: int,
@@ -138,6 +141,7 @@ class CLIBudgetTracker:
             agent_name=agent_name,
             backend=backend,
             model=model,
+            resumed=resumed,
             duration_seconds=duration_seconds,
             prompt_chars=prompt_chars,
             output_chars=output_chars,
@@ -149,8 +153,8 @@ class CLIBudgetTracker:
             self._append_ledger(record)
 
         logger.info(
-            "[CLI Budget] %s: %.1fs (total: %d/%d invocations, %.0f/%.0fs wall-clock)",
-            agent_name, duration_seconds,
+            "[CLI Budget] %s: %.1fs resumed=%s (total: %d/%d invocations, %.0f/%.0fs wall-clock)",
+            agent_name, duration_seconds, resumed,
             len(self._invocations), self.max_invocations,
             self._total_seconds, self.max_wall_clock,
         )
@@ -160,14 +164,21 @@ class CLIBudgetTracker:
         with self._lock:
             by_backend: dict[str, int] = {}
             by_agent: dict[str, float] = {}
+            resumed_count = 0
+            resumed_by_agent: dict[str, int] = {}
             for r in self._invocations:
                 by_backend[r.backend] = by_backend.get(r.backend, 0) + 1
                 by_agent[r.agent_name] = by_agent.get(r.agent_name, 0.0) + r.duration_seconds
+                if r.resumed:
+                    resumed_count += 1
+                    resumed_by_agent[r.agent_name] = resumed_by_agent.get(r.agent_name, 0) + 1
             return {
                 "invocation_count": len(self._invocations),
                 "total_seconds": self._total_seconds,
                 "by_backend": by_backend,
                 "by_agent": by_agent,
+                "resumed_count": resumed_count,
+                "resumed_by_agent": resumed_by_agent,
             }
 
 

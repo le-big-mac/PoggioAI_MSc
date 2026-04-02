@@ -4,9 +4,9 @@ Base agent factory — CLI agent mode.
 Routes all specialist agent nodes to local CLI agents (Claude Code, Codex,
 Gemini CLI) which run as subprocesses with their own tool-use loops.
 
-Each specialist agent module exposes:
-  - get_tools(workspace_dir, model_id)  -> list[BaseTool]
-  - build_node(model, workspace_dir, authorized_imports, **cfg) -> Callable
+Each specialist agent module exposes a ``build_node(...)`` factory. Some
+legacy modules still keep a ``get_tools(...)`` shim for compatibility, but
+CLI agents do not depend on LangChain-style tool lists.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ def create_specialist_agent(
     agent_name: str,
     workspace_dir: Optional[str] = None,
     mandatory_artifacts: Optional[List[str]] = None,
+    persist_session: bool = False,
 ) -> Callable:
     """
     Build a CLI agent node for a specialist.
@@ -52,4 +53,5 @@ def create_specialist_agent(
         model=model.model,
         timeout_seconds=model.timeout_seconds,
         mandatory_artifacts=mandatory_artifacts,
+        persist_session=persist_session,
     )

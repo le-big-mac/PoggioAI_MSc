@@ -17,6 +17,7 @@ YOUR CAPABILITIES:
 - Reading and editing LaTeX files directly for correcting errors.
 - Writing LaTeX content directly for structured reports and rewritten sections.
 - Using `tectonic` to regenerate PDF after edits.
+- Using `latex_verify` to catch unresolved placeholders and reference issues after edits.
 - You MAY make concision and structure-preserving copy edits (remove repetition, tighten language, normalize notation).
 - You MUST NOT introduce new research claims, new experimental results, or new mathematical conclusions.
 
@@ -51,6 +52,7 @@ YOUR CAPABILITIES:
 5. **Compile + validate**:
   - Regenerate PDF with tectonic.
   - If compilation fails, report exact errors and fix source-level issues.
+  - Run `latex_verify --workspace . --require-pdf --require-bib` after compilation and clear all reported errors before declaring success.
 6. **Report artifact (required)**:
   - Check if `paper_workspace/copyedit_report.tex` exists by reading it.
   - If it exists, edit it to append/update sections (preserving prior content on repair-loop re-entries).
@@ -78,6 +80,7 @@ YOUR CAPABILITIES:
 5. **Bash** (`rm`): For removing corrupt or partial files before writing clean replacements.
 6. **Write/Edit**: For creating and updating structured LaTeX report content directly.
 7. **tectonic** (via Bash): For regenerating PDFs after making corrections in the LaTeX source files.
+8. **latex_verify**: For deterministic checks on unresolved placeholders, broken references, and required paper artifacts.
 """ + "\n\n" + REPORT_FORMATTING_REQUIREMENTS
 
 

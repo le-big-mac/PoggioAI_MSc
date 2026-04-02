@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
 from ..cli_completion import cli_completion
+from ..utils import infer_cli_backend
 
 from langgraph.graph import END, StateGraph
 
@@ -140,7 +141,8 @@ def generate_experiment_strategies(
     raw = cli_completion(
         user_msg,
         system_prompt=_EXPERIMENT_STRATEGY_SYSTEM.format(n=n),
-        backend="claude",
+        backend=infer_cli_backend(model),
+        model=model,
     ).strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1]
@@ -771,6 +773,7 @@ def build_tree_search_experiment_track(
     summary_model_id: Optional[str] = "claude-sonnet-4-6",
     tree_config: Optional[TreeSearchConfig] = None,
     model_id: str = "claude-sonnet-4-6",
+    model_registry: Optional[Any] = None,
     adversarial_verification: bool = False,
 ) -> Any:
     """Build the experiment track subgraph with tree search integration.
@@ -793,6 +796,11 @@ def build_tree_search_experiment_track(
     graph = StateGraph(ResearchState)
     counsel_kwargs = {"counsel_models": counsel_models} if counsel_models is not None else {}
 
+    def _m(agent_name: str) -> Any:
+        if model_registry is not None:
+            return model_registry.get(agent_name)
+        return model
+
     def _wrap(node, name):
         return with_pdf_summary(node, name, workspace_dir, summary_model_id)
 
@@ -800,27 +808,18 @@ def build_tree_search_experiment_track(
     graph.add_node(
         "experiment_literature_agent",
         _wrap(
-            build_experiment_literature_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+            build_experiment_literature_node(_m("experiment_literature_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "experiment_literature_agent",
         ),
     )
 
     if tree_config and tree_config.enabled:
         # Build raw nodes without counsel — counsel managed per-branch
-        design = build_experiment_design_node(model, workspace_dir, authorized_imports)
-        experimentation = build_experimentation_node(model, workspace_dir, authorized_imports)
-        verification = build_experiment_verification_node(model, workspace_dir, authorized_imports)
+        design = build_experiment_design_node(_m("experiment_design_agent"), workspace_dir, authorized_imports)
+        experimentation = build_experimentation_node(_m("experimentation_agent"), workspace_dir, authorized_imports)
+        verification = build_experiment_verification_node(_m("experiment_verification_agent"), workspace_dir, authorized_imports)
 
         # Build descriptors for counsel-capable branch execution
-        from consortium.agents.experiment_design_agent import (
-            get_tools as design_get_tools,
-        )
-        from consortium.agents.experimentation_agent import (
-            get_tools as experimentation_get_tools,
-        )
-        from consortium.agents.experiment_verification_agent import (
-            get_tools as verification_get_tools,
-        )
         from consortium.prompts.experiment_design_instructions import (
             get_experiment_design_system_prompt,
         )
@@ -830,42 +829,29 @@ def build_tree_search_experiment_track(
         from consortium.prompts.experiment_verification_instructions import (
             get_experiment_verification_system_prompt,
         )
-        from consortium.toolkits.model_utils import get_raw_model
-        raw_model_id = get_raw_model(model)
-
-        # Wrap get_tools with closures to match _AgentDescriptor's
-        # expected signature: get_tools(workspace_dir) -> list
-        def _design_tools(ws):
-            return design_get_tools(ws, authorized_imports)
-
-        def _experimentation_tools(ws):
-            return experimentation_get_tools(ws, raw_model_id)
-
-        def _verification_tools(ws):
-            return verification_get_tools(ws, raw_model_id, authorized_imports)
 
         design_desc = _AgentDescriptor(
             agent_name="experiment_design_agent",
             get_system_prompt=get_experiment_design_system_prompt,
-            get_tools=_design_tools,
+            get_tools=lambda _ws: [],
             fallback_node=design,
-            model=model,
+            model=_m("experiment_design_agent"),
             authorized_imports=authorized_imports,
         )
         experimentation_desc = _AgentDescriptor(
             agent_name="experimentation_agent",
             get_system_prompt=get_experimentation_system_prompt,
-            get_tools=_experimentation_tools,
+            get_tools=lambda _ws: [],
             fallback_node=experimentation,
-            model=model,
+            model=_m("experimentation_agent"),
             authorized_imports=authorized_imports,
         )
         verification_desc = _AgentDescriptor(
             agent_name="experiment_verification_agent",
             get_system_prompt=get_experiment_verification_system_prompt,
-            get_tools=_verification_tools,
+            get_tools=lambda _ws: [],
             fallback_node=verification,
-            model=model,
+            model=_m("experiment_verification_agent"),
             authorized_imports=authorized_imports,
         )
 
@@ -881,7 +867,7 @@ def build_tree_search_experiment_track(
             experimentation_descriptor=experimentation_desc,
             verification_descriptor=verification_desc,
             adversarial_verification=adversarial_verification,
-            adversarial_model=model,
+            adversarial_model=_m("experiment_verification_agent"),
         )
 
         graph.add_node("experiment_tree_search_controller", tree_controller)
@@ -890,21 +876,21 @@ def build_tree_search_experiment_track(
         graph.add_node(
             "experiment_design_agent",
             _wrap(
-                build_experiment_design_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+                build_experiment_design_node(_m("experiment_design_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
                 "experiment_design_agent",
             ),
         )
         graph.add_node(
             "experimentation_agent",
             _wrap(
-                build_experimentation_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+                build_experimentation_node(_m("experimentation_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
                 "experimentation_agent",
             ),
         )
         graph.add_node(
             "experiment_verification_agent",
             _wrap(
-                build_experiment_verification_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+                build_experiment_verification_node(_m("experiment_verification_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
                 "experiment_verification_agent",
             ),
         )
@@ -912,7 +898,7 @@ def build_tree_search_experiment_track(
     graph.add_node(
         "experiment_transcription_agent",
         _wrap(
-            build_experiment_transcription_node(model, workspace_dir, authorized_imports, **counsel_kwargs),
+            build_experiment_transcription_node(_m("experiment_transcription_agent"), workspace_dir, authorized_imports, **counsel_kwargs),
             "experiment_transcription_agent",
         ),
     )

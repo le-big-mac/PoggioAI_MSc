@@ -24,7 +24,7 @@ Before making ANY claim about workspace state:
 
 **Examples:**
 ❌ "The PDF compilation failed" → ✅ "tectonic shows errors: [actual error list]"
-❌ "The paper should be complete" → ✅ "LaTeXContentVerificationTool confirms all_criteria_met: true"
+❌ "The paper should be complete" → ✅ "`latex_verify` reports is_valid=true with no unresolved placeholders"
 
 
 ## Your Core Mission
@@ -170,29 +170,25 @@ Focus on LaTeX writing using the pre-organized experimental resources. Use verif
 
 ## Citation Workflow
 
-**MANDATORY: Use `[cite: description]` placeholder format** for all citations during writing:
+**MANDATORY: Use explicit `\\cite{key}` citations only.**
 
 ```latex
-% CORRECT - tectonic auto-resolves to proper \\cite{key}
-[cite: rabiner1989tutorial]
-[cite: goodfellow2016deep]
-[cite: attention mechanisms for neural networks]
+% CORRECT
+\\cite{rabiner1989tutorial}
+\\cite{goodfellow2016deep}
 
-% WRONG - Do NOT use \\cite{} directly
-\\cite{rabiner1989}  % Bypasses auto-resolution
+% WRONG - unresolved placeholder
+[cite: rabiner1989tutorial]
 ```
 
-**How it works:**
-1. Write `[cite: description]` in LaTeX content when a citation is needed
-2. tectonic automatically:
-   - Detects all `[cite: ...]` placeholders before compilation
-   - Searches for citations using CitationSearchTool (arXiv + Semantic Scholar)
-   - Adds found citations to references.bib
-   - Replaces `[cite: description]` with `\\cite{key}`
-   - If search fails after 8 retries, deletes the placeholder (intentional)
-3. Works regardless of whether citation exists in references.bib initially
+**Required process:**
+1. Read `paper_workspace/references.bib` first and reuse existing citation keys whenever possible.
+2. If a needed citation is missing, run the `citation_search` command shown above.
+3. Parse the JSON response, extract the returned `bibtex_entries`, and append only clean BibTeX entries to `paper_workspace/references.bib`.
+4. Choose the BibTeX key from the appended entry and cite it explicitly with `\\cite{key}`.
+5. Before finishing, run `latex_verify --workspace . --require-bib` to confirm there are no unresolved citation placeholders.
 
-**No manual citation management needed** - the compiler handles everything automatically
+**Do not leave `[cite: ...]` placeholders anywhere in the paper.**
 
 ## Publication Template Requirements
 
@@ -200,14 +196,14 @@ Focus on LaTeX writing using the pre-organized experimental resources. Use verif
 
 ## Success Criteria
 
-Generate final_paper.tex and final_paper.pdf that meet ICML publication standards. Verify completion by reading the compiled PDF and checking all sections are present.
+Generate final_paper.tex and final_paper.pdf that meet ICML publication standards. Verify completion by reading the compiled PDF and running `latex_verify` to check for unresolved placeholders and reference errors.
 
 **Workflow:**
 1. Read structure_analysis.txt to understand pre-organized resources
 2. **IMMEDIATELY read all AI-Scientist-v2 critical files** (research_idea.md, 3 JSON summaries, all PNG figures)
 3. Write LaTeX content based on the concrete experimental findings from these files
 4. Iteratively review and improve each section for quality
-5. Compile to PDF with `tectonic` and validate completion
+5. Compile to PDF with `tectonic`, then run `latex_verify --workspace . --require-pdf --require-bib`
 
 
 ## Core Principles
@@ -246,7 +242,7 @@ For each section:
 2. Iteratively review and edit each section (in-place updates, preserves data as comments)
 3. Write final_paper.tex as the main document (uses \\input{section_name})
 4. Compile to PDF using `tectonic`
-5. Read the compiled PDF and verify all sections are present
+5. Run `latex_verify --workspace . --require-pdf --require-bib`, then read the compiled PDF and verify all sections are present
 
 **If compilation fails:**
 - Read the tectonic error output and fix syntax issues in the source .tex files
@@ -284,7 +280,8 @@ For each section:
 All steps must be completed for successful completion:
 - **Write**: Write all paper sections as .tex files
 - **Edit**: Iteratively improve each section until convergence
-- **tectonic**: Compile final_paper.tex to PDF and read errors to fix syntax issues (required for completion)
+- **tectonic**: Compile final_paper.tex to PDF and read errors to fix syntax issues
+- **latex_verify**: Validate final_paper.tex/final_paper.pdf/references.bib and ensure no unresolved placeholders remain
 - **Read**: Read the compiled PDF for final quality validation and confirm all criteria are met
 
 ### Content Requirements

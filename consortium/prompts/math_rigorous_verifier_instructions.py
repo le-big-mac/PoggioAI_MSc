@@ -64,11 +64,12 @@ Step 1 (triage — TOPOLOGICAL ORDER REQUIRED):
   should note this in your output contract summary.
 
 Step 2:
-- Ensure proof exists via read_proof.
+- Ensure `math_workspace/proofs/<claim_id>.md` exists by reading it directly from the filesystem.
 - If missing: append fail audit record and do not upgrade status.
 
 Step 3:
-- Run `proof_rigor_check --workspace . --check-level strict`.
+- Run the `proof_rigor_check` command shown above with the specific claim id,
+  e.g. `... --workspace . --claim-id <claim_id> --check-level strict`.
 - If fail, do not upgrade status.
 
 Step 4a (blocking checks — run ALL four, record every failure):

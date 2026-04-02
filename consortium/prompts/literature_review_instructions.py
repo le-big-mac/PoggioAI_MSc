@@ -77,7 +77,7 @@ REQUIRED WORKFLOW
 2) Search broadly using:
    - Semantic Scholar (`paper_search`)
    - arXiv (`arxiv_search`)
-   - web deep search (`WebSearch`) for non-arXiv sources and context.
+   - the CLI agent's native web search / browser capability for non-arXiv sources and context.
 3) Build candidate set, deduplicate, and rank by relevance + credibility.
 3b) CLAIM FALSIFICATION (MANDATORY — do not skip or abbreviate):
     Before reading any PDFs in depth, extract every core claim from
@@ -90,7 +90,7 @@ REQUIRED WORKFLOW
        (ii) known special cases or partial results, (iii) equivalent formulations
        under different terminology or in adjacent fields.
     b) Search using ALL available tools: paper_search, arxiv_search,
-       and WebSearch targeting
+       and your native web search/browser capability targeting
        MathOverflow (mathoverflow.net), zbMATH (zbmath.org), nLab (ncatlab.org),
        and Wikipedia.
     c) Assign each claim a status:

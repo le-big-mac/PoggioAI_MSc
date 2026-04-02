@@ -77,7 +77,7 @@ MANDATORY INPUT FILES (read before designing any claims)
 
 MANDATORY WORKFLOW
 Step 0:
-- Call claim_graph(action="init").
+- Run the `claim_graph` command shown above with `--action init`.
 - Ensure proof/check directories exist (mkdir -p math_workspace/proofs math_workspace/checks).
 
 Step 0.5 — Read Literature Context:

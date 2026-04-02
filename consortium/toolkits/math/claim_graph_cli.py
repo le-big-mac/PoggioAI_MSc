@@ -4,6 +4,19 @@ import json
 import sys
 
 
+def _parse_optional_bool(value: str):
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(
+        "--must-accept must be one of: true, false, 1, 0, yes, no"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Manage math claim graphs")
     parser.add_argument("--workspace", required=True, help="Workspace directory")
@@ -15,7 +28,7 @@ def main():
     parser.add_argument("--tags", default=None, help="JSON array of tags")
     parser.add_argument("--status", default=None)
     parser.add_argument("--notes", default=None)
-    parser.add_argument("--must-accept", type=bool, default=None)
+    parser.add_argument("--must-accept", type=_parse_optional_bool, default=None)
     parser.add_argument("--lemma-id", default=None)
     parser.add_argument("--lemma-tier", default=None)
     parser.add_argument("--lemma-statement", default=None)
@@ -41,7 +54,7 @@ def main():
             status=args.status,
             notes=args.notes,
             must_accept=args.must_accept,
-            workspace_subdir=".",
+            workspace_subdir="math_workspace",
             lemma_id=args.lemma_id,
             lemma_tier=args.lemma_tier,
             lemma_statement=args.lemma_statement,

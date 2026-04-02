@@ -7,6 +7,8 @@ Contains the system prompt with dynamic placeholders for:
 - Workspace management guidance
 """
 
+import sys
+
 # System prompt template with placeholders
 SYSTEM_PROMPT_TEMPLATE = """
 You are a specialized agent in a multi-agent system designed for autonomous, end-to-end AI/ML research. Your primary function is to write code blobs to call tools to accomplish given tasks. You are also given access to a workspace, which is a folder with files potentially relevant to the task at hand.
@@ -212,13 +214,16 @@ def build_system_prompt(tools, instructions, workspace_guidance, managed_agents=
 
 # Specialized tools that CLI agents don't have natively.
 # Listed as shell commands the CLI agent can invoke.
+_PYTHON_BIN = sys.executable or "python3"
 _CLI_TOOL_COMMANDS = {
-    "paper_search": "python -m consortium.toolkits.ideation.paper_search_cli --query '<query>' --limit 10",
-    "arxiv_search": "python -m consortium.toolkits.search.fetch_arxiv_papers.cli_entry --query '<query>' --max-results 10",
-    "claim_graph": "python -m consortium.toolkits.math.claim_graph_cli --workspace . --action '<action>' [--claim-id '<id>'] [--statement '<text>']",
-    "proof_rigor_check": "python -m consortium.toolkits.math.proof_rigor_cli --workspace . [--claim-id '<id>'] [--check-level strict]",
-    "citation_search": "python -m consortium.toolkits.writeup.citation_search_cli --query '<query>' --limit 10 --source both",
+    "paper_search": f"{_PYTHON_BIN} -m consortium.toolkits.ideation.paper_search_cli --query '<query>' --limit 10",
+    "arxiv_search": f"{_PYTHON_BIN} -m consortium.toolkits.search.fetch_arxiv_papers.cli_entry --query '<query>' --max-results 10",
+    "claim_graph": f"{_PYTHON_BIN} -m consortium.toolkits.math.claim_graph_cli --workspace . --action '<action>' [--claim-id '<id>'] [--statement '<text>']",
+    "proof_rigor_check": f"{_PYTHON_BIN} -m consortium.toolkits.math.proof_rigor_cli --workspace . --claim-id '<id>' [--check-level strict]",
+    "citation_search": f"{_PYTHON_BIN} -m consortium.toolkits.writeup.citation_search_cli --query '<query>' --limit 10 --source both",
+    "run_experiment": f"{_PYTHON_BIN} -m consortium.toolkits.experimentation.run_experiment_cli --workspace . --spec-file experiment_workspace/experiment_design.json --experiment-id '<id>'",
     "latex_compile": "tectonic <file.tex>  # single command, handles bibtex/references automatically",
+    "latex_verify": f"{_PYTHON_BIN} -m consortium.toolkits.writeup.latex_verify_cli --workspace . [--require-pdf] [--require-bib]",
 }
 
 
