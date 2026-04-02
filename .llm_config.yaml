@@ -5,28 +5,27 @@
 # instead of making API calls. Much cheaper with subscription plans.
 
 # --- Default CLI backend ---
-default_backend: claude              # claude | codex | gemini
-default_model: claude-opus-4-6     # model flag passed to the CLI tool
+default_backend: codex               # claude | codex | gemini
+default_model: gpt-5.4               # model flag passed to the CLI tool
 timeout_seconds: 3600                # max wall-clock seconds per agent invocation
 
 # --- Budget enforcement (invocation / wall-clock based) ---
 budget:
-  max_invocations: 100               # max total CLI agent calls
-  max_wall_clock_seconds: 14400      # max total subprocess time (4h)
+  max_invocations: 80                # max total CLI agent calls
+  max_wall_clock_seconds: 10800      # max total subprocess time (3h)
 
 # --- Per-agent backend overrides (optional) ---
 # Assign different CLI backends or models to specific agents.
-# agent_backends:
-#   math_prover_agent:
-#     backend: claude
-#     model: claude-opus-4-6
-#     timeout_seconds: 7200
-#   experimentation_agent:
-#     backend: codex
-#     model: gpt-5.4
-#   math_literature_agent:
-#     backend: gemini
-#     model: gemini-3.1-pro-preview
+agent_backends:
+  literature_review_agent:
+    backend: claude
+    model: claude-opus-4-6
+  research_plan_writeup_agent:
+    backend: claude
+    model: claude-opus-4-6
+  quick_verdict:
+    backend: claude
+    model: claude-opus-4-6
 
 # --- Counsel mode (multi-model debate) ---
 # counsel:
@@ -41,17 +40,17 @@ budget:
 
 # --- Persona council (V2 pipeline) ---
 persona_council:
-  max_debate_rounds: 3
+  max_debate_rounds: 2
   synthesis_model: claude-opus-4-6
   personas:
     - persona: practical_compass
-      model: claude-opus-4-6
+      model: gpt-5.4
       reasoning_effort: high
     - persona: rigor_novelty
       model: gpt-5.4
       reasoning_effort: high
     - persona: narrative_architect
-      model: gpt-5.4
+      model: claude-opus-4-6
       reasoning_effort: high
 
 # --- Duality check model ---
