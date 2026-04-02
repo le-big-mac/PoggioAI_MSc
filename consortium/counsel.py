@@ -167,6 +167,9 @@ def _cli_agent_completion(
     model: Optional[str],
     workspace_dir: str,
     timeout: int = 600,
+    session_id: Optional[str] = None,
+    resume: bool = False,
+    metadata: Optional[dict] = None,
 ) -> str:
     """Run a CLI agent with full tool access for debate/synthesis phases.
 
@@ -175,12 +178,17 @@ def _cli_agent_completion(
     etc. so it can examine workspace files, verify claims, and search for
     information during debate critiques and synthesis.
 
+    Supports session resume to keep context across debate rounds.
+
     Args:
         prompt: The debate/synthesis prompt.
         backend: CLI backend — "claude", "codex", or "gemini".
         model: Optional model override.
         workspace_dir: Working directory for the agent (gives file access).
         timeout: Max seconds for the subprocess.
+        session_id: Session UUID for multi-turn debate.
+        resume: If True, resume the session instead of starting a new one.
+        metadata: Optional mutable dict for side-channel info (e.g. codex session_id).
 
     Returns:
         Response text. On error/timeout returns a descriptive error string.
@@ -195,14 +203,24 @@ def _cli_agent_completion(
             "--allowedTools",
             "Read,Write,WebFetch,WebSearch,Bash(cat*),Bash(ls*),Bash(grep*),Bash(find*),Bash(python*),Bash(curl*),Glob,Grep",
         ])
+        if resume and session_id:
+            cmd.extend(["--resume", session_id])
+        elif session_id:
+            cmd.extend(["--session-id", session_id])
     elif backend == "codex":
-        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
+        if resume and session_id:
+            cmd = ["codex", "exec", "resume", session_id,
+                   "--dangerously-bypass-approvals-and-sandbox"]
+        else:
+            cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
         if model:
-            cmd.extend(["--model", model])
+            cmd.extend(["-m", model])
     elif backend == "gemini":
         cmd = ["gemini", "--approval-mode", "yolo"]
         if model:
             cmd.extend(["--model", model])
+        if resume:
+            cmd.extend(["--resume", "latest"])
     else:
         return f"[_cli_agent_completion error: unknown backend {backend!r}]"
 
@@ -223,6 +241,13 @@ def _cli_agent_completion(
         return msg
 
     elapsed = time.time() - t0
+
+    # Extract session ID from codex stderr
+    if backend == "codex" and metadata is not None and result.stderr:
+        from .cli_completion import extract_session_id
+        sid = extract_session_id(result.stderr)
+        if sid:
+            metadata["session_id"] = sid
 
     if result.returncode != 0:
         stderr_snippet = (result.stderr or "")[:500]
@@ -378,40 +403,57 @@ def run_counsel_stage(
 
     # ------------------------------------------------------------------
     # 2. Debate phase — all critiques per round run in parallel
+    #    Each model keeps a session across rounds via session resume.
     # ------------------------------------------------------------------
+    import uuid as _uuid
+
     formatted = "\n\n".join(
         f"=== Solution {i} ({specs[i].get('model', i)}) ===\n{out}"
         for i, out in enumerate(sandbox_outputs)
     )
     debate_history: List[str] = []
+    debate_sessions = [str(_uuid.uuid4()) for _ in specs]
 
     for rnd in range(max_debate_rounds):
-        base_prompt = (
-            f"Task: {task}\n\n"
-            f"Here are {len(sandbox_outputs)} independent solutions:\n\n{formatted}\n\n"
-        )
-        if debate_history:
-            base_prompt += "Prior debate:\n" + "\n---\n".join(debate_history) + "\n\n"
-        base_prompt += (
-            "Identify: (1) strongest elements of each solution, "
-            "(2) weaknesses or errors, (3) a synthesized approach capturing the best of all. "
-            "Be specific and concise."
-        )
+        is_first_round = (rnd == 0)
 
-        def _one_critique(i: int) -> tuple[int, str]:
+        if is_first_round:
+            round_prompt = (
+                f"Task: {task}\n\n"
+                f"Here are {len(sandbox_outputs)} independent solutions:\n\n{formatted}\n\n"
+                "Identify: (1) strongest elements of each solution, "
+                "(2) weaknesses or errors, (3) a synthesized approach capturing the best of all. "
+                "Be specific and concise."
+            )
+        else:
+            round_prompt = (
+                f"Debate round {rnd + 1}. Latest critiques from all models:\n\n"
+                + debate_history[-1] + "\n\n"
+                "Continue the debate. Respond to the new critiques. "
+                "Identify strongest/weakest elements and refine your synthesis. "
+                "Be specific and concise."
+            )
+
+        def _one_critique(i: int, prompt=round_prompt, first=is_first_round) -> tuple[int, str]:
             spec = specs[i]
             backend = spec.get("backend") or _model_to_backend(spec.get("model", ""))
             model = spec.get("model")
+            meta: dict = {}
             try:
                 critique = _cli_agent_completion(
-                    base_prompt,
+                    prompt,
                     backend=backend,
                     model=model,
                     workspace_dir=workspace_dir,
                     timeout=model_timeout_seconds,
+                    session_id=debate_sessions[i],
+                    resume=not first,
+                    metadata=meta,
                 )
             except Exception as e:
                 critique = f"[{model} debate error: {e}]"
+            if "session_id" in meta:
+                debate_sessions[i] = meta["session_id"]
             return i, f"Model {i} ({model}):\n{critique}"
 
         critiques: List[str] = [""] * len(specs)

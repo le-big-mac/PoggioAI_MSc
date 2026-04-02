@@ -458,6 +458,8 @@ def _run_claude_agent(
     permission_mode: Optional[str] = None,
     allowed_tools: Optional[List[str]] = None,
     max_turns: int = 30,
+    session_id: Optional[str] = None,
+    resume: bool = False,
 ) -> tuple[str, int]:
     """Spawn a Claude Code agent in non-interactive mode.
 
@@ -472,6 +474,8 @@ def _run_claude_agent(
         permission_mode: Claude Code permission mode ("plan", "default", etc.).
         allowed_tools: Restrict to these tools only (e.g. ["Read", "Glob", "Grep"]).
         max_turns: Maximum agent turns.
+        session_id: Session UUID for multi-turn (plan → execute).
+        resume: If True, resume the session instead of starting a new one.
 
     Returns:
         (agent_output, return_code)
@@ -495,6 +499,11 @@ def _run_claude_agent(
         cmd.extend(["--tools", ",".join(allowed_tools)])
 
     cmd.extend(["--max-turns", str(max_turns)])
+
+    if resume and session_id:
+        cmd.extend(["--resume", session_id])
+    elif session_id:
+        cmd.extend(["--session-id", session_id])
 
     env = {**os.environ}
     env["CLAUDE_CODE_MAX_COST_CENTS"] = str(int(budget_usd * 100))
@@ -884,8 +893,15 @@ def _attempt_repair_two_phase(
     attempt_num: int,
     t0: float,
 ) -> RepairResult:
-    """Two-phase repair: plan (read-only) → review → execute."""
+    """Two-phase repair: plan (read-only) → review → execute.
+
+    Uses session resume so Phase 2 retains full context from Phase 1's
+    diagnosis — no need to re-read logs or re-diagnose.
+    """
+    import uuid as _uuid
+
     sid = context["stage_id"]
+    repair_session = str(_uuid.uuid4())
 
     # ------------------------------------------------------------------
     # PHASE 1: Plan (read-only, plan permission mode)
@@ -914,6 +930,7 @@ def _attempt_repair_two_phase(
         permission_mode="plan",
         allowed_tools=["Read", "Glob", "Grep", "Bash"],
         max_turns=20,
+        session_id=repair_session,
     )
 
     # Save plan output
@@ -985,6 +1002,8 @@ def _attempt_repair_two_phase(
         timeout_seconds=repair_config.timeout_seconds,
         permission_mode="bypassPermissions",
         max_turns=30,
+        session_id=repair_session,
+        resume=True,
     )
 
     duration = time.time() - t0

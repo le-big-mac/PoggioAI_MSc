@@ -349,19 +349,28 @@ def run_campaign_planning_counsel(
 
     # ------------------------------------------------------------------
     # 1. Proposal phase — each model proposes a campaign structure
+    #    Sessions are kept alive from proposal through debate rounds.
     # ------------------------------------------------------------------
+    import uuid as _uuid
+
     print("[planner] Starting proposal phase...")
+    model_sessions = [str(_uuid.uuid4()) for _ in specs]
 
     def _one_proposal(i: int) -> tuple:
         spec = specs[i]
+        meta: Dict[str, Any] = {}
         try:
             output = cli_completion(
                 task,
                 system_prompt=CAMPAIGN_PLANNING_SYSTEM_PROMPT,
                 backend=_model_to_backend(spec["model"]),
+                session_id=model_sessions[i],
+                metadata=meta,
             ) or ""
         except Exception as e:
             output = f"[{spec['model']} failed: {e}]"
+        if "session_id" in meta:
+            model_sessions[i] = meta["session_id"]
         print(f"[planner] model_{i} ({spec['model']}) proposal complete.")
         return i, output
 
@@ -381,7 +390,7 @@ def run_campaign_planning_counsel(
                         break
 
     # ------------------------------------------------------------------
-    # 2. Debate phase
+    # 2. Debate phase — sessions resumed from proposal phase
     # ------------------------------------------------------------------
     formatted = "\n\n".join(
         f"=== Proposal {i} ({specs[i]['model'] if i < len(specs) else i}) ===\n{out}"
@@ -391,32 +400,42 @@ def run_campaign_planning_counsel(
 
     for rnd in range(max_debate_rounds):
         print(f"[planner] Starting debate round {rnd + 1}/{max_debate_rounds}...")
-        base_prompt = (
-            f"You are evaluating campaign structure proposals for a research campaign.\n\n"
-            f"Original research plan task:\n{task}\n\n"
-            f"Here are {len(proposals)} independent proposals:\n\n{formatted}\n\n"
-        )
-        if debate_history:
-            base_prompt += "Prior debate:\n" + "\n---\n".join(debate_history) + "\n\n"
-        base_prompt += (
-            "Evaluate each proposal and identify:\n"
-            "1. Which proposal has the best stage decomposition and why\n"
-            "2. Weaknesses in each proposal (missing stages, wrong dependencies, "
-            "unnecessary stages)\n"
-            "3. The optimal synthesis incorporating the best elements\n"
-            "Be specific about dependency ordering, parallelism opportunities, "
-            "and whether the task prompts are detailed enough."
-        )
 
-        def _one_critique(i: int) -> tuple:
+        if rnd == 0:
+            round_prompt = (
+                f"You are evaluating campaign structure proposals for a research campaign.\n\n"
+                f"Here are {len(proposals)} independent proposals:\n\n{formatted}\n\n"
+                "Evaluate each proposal and identify:\n"
+                "1. Which proposal has the best stage decomposition and why\n"
+                "2. Weaknesses in each proposal (missing stages, wrong dependencies, "
+                "unnecessary stages)\n"
+                "3. The optimal synthesis incorporating the best elements\n"
+                "Be specific about dependency ordering, parallelism opportunities, "
+                "and whether the task prompts are detailed enough."
+            )
+        else:
+            round_prompt = (
+                f"Debate round {rnd + 1}. Latest critiques from all models:\n\n"
+                + debate_history[-1] + "\n\n"
+                "Continue the debate. Respond to the new critiques. "
+                "Refine your assessment of which proposal structure is optimal."
+            )
+
+        def _one_critique(i: int, prompt=round_prompt, first_debate=(rnd == 0)) -> tuple:
             spec = specs[i]
+            meta: Dict[str, Any] = {}
             try:
                 critique = cli_completion(
-                    base_prompt,
+                    prompt,
                     backend=_model_to_backend(spec["model"]),
+                    session_id=model_sessions[i],
+                    resume=True,  # always resume — session started in proposal phase
+                    metadata=meta,
                 ) or ""
             except Exception as e:
                 critique = f"[{spec['model']} debate error: {e}]"
+            if "session_id" in meta:
+                model_sessions[i] = meta["session_id"]
             return i, f"Model {i} ({spec['model']}):\n{critique}"
 
         critiques: List[str] = [""] * len(specs)
@@ -453,22 +472,27 @@ def run_campaign_planning_counsel(
         "Output ONLY valid JSON, no other text."
     )
 
-    # Retry loop for synthesis (JSON parsing may fail)
+    # Retry loop for synthesis (JSON parsing may fail).
+    # Uses session resume so the model sees its own prior failed attempts.
     max_retries = 3
     last_error = None
+    synthesis_session = str(_uuid.uuid4())
     for attempt in range(max_retries):
         try:
-            user_prompt = synthesis_prompt
-            if attempt > 0 and last_error:
-                user_prompt += (
-                    f"\n\nYour previous output had errors: {last_error}\n"
+            if attempt == 0:
+                user_prompt = synthesis_prompt
+            else:
+                user_prompt = (
+                    f"Your previous output had errors: {last_error}\n"
                     "Please fix and output valid JSON only."
                 )
 
             raw_output = cli_completion(
                 user_prompt,
-                system_prompt=CAMPAIGN_PLANNING_SYSTEM_PROMPT,
+                system_prompt=CAMPAIGN_PLANNING_SYSTEM_PROMPT if attempt == 0 else "",
                 backend=_model_to_backend(_SYNTHESIS_MODEL),
+                session_id=synthesis_session,
+                resume=(attempt > 0),
             ) or ""
 
             # Parse JSON

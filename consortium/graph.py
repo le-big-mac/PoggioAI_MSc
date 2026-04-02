@@ -1645,8 +1645,14 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
             }
 
         # ------------------------------------------------------------------
-        # CLI-based feasibility assessment
+        # CLI-based feasibility assessment (session resumed on re-entry)
         # ------------------------------------------------------------------
+        import uuid as _uuid
+
+        gate_session = state.get("_lit_gate_session_id")
+        is_gate_retry = gate_session is not None
+        if not gate_session:
+            gate_session = str(_uuid.uuid4())
 
         # Build novelty context for the feasibility prompt
         novelty_context = ""
@@ -1684,7 +1690,10 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
         )
         try:
             from .cli_completion import cli_completion
-            raw = cli_completion(prompt, backend="claude")
+            raw = cli_completion(
+                prompt, backend="claude",
+                session_id=gate_session, resume=is_gate_retry,
+            )
             raw = _re.sub(r"^```(?:json)?\s*", "", raw.strip())
             raw = _re.sub(r"\s*```$", "", raw)
             result = json.loads(raw)
@@ -1694,6 +1703,7 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
                 "current_agent": "brainstorm_agent",
                 "lit_review_feasibility": {"feasible": True, "reason": f"assessment failed: {e}"},
                 "agent_task": None,
+                "_lit_gate_session_id": gate_session,
             }
 
         feasible = result.get("feasible", True)
@@ -1705,6 +1715,7 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
                 "lit_review_feasibility": {"feasible": True, "reason": reason},
                 "agent_task": _build_brainstorm_novelty_directive(novelty_data)
                 if novelty_data else None,
+                "_lit_gate_session_id": gate_session,
             }
 
         # Infeasible
@@ -1717,6 +1728,7 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
                 "current_agent": "brainstorm_agent",
                 "lit_review_feasibility": {"feasible": False, "reason": reason},
                 "agent_task": None,
+                "_lit_gate_session_id": gate_session,
             }
 
         return {
@@ -1730,6 +1742,7 @@ def build_lit_review_gate_node(workspace_dir: str, max_attempts: int = 2) -> Any
                 "Re-evaluate the research direction. Consider pivoting the angle, "
                 "narrowing scope, or identifying an unexplored niche."
             ),
+            "_lit_gate_session_id": gate_session,
         }
 
     lit_review_gate_node.__name__ = "lit_review_gate"
@@ -1860,9 +1873,18 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
             '"overall_assessment": "one paragraph"}'
         )
 
+        import uuid as _uuid
+        verify_session = state.get("_verify_session_id")
+        is_verify_retry = verify_session is not None
+        if not verify_session:
+            verify_session = str(_uuid.uuid4())
+
         try:
             from .cli_completion import cli_completion
-            raw = cli_completion(prompt, backend="claude")
+            raw = cli_completion(
+                prompt, backend="claude",
+                session_id=verify_session, resume=is_verify_retry,
+            )
             raw = _re.sub(r"^```(?:json)?\s*", "", raw.strip())
             raw = _re.sub(r"\s*```$", "", raw)
             result = json.loads(raw)
@@ -1876,6 +1898,7 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
                     "goal_verdicts": [], "error": str(e),
                 },
                 "agent_task": None,
+                "_verify_session_id": verify_session,
             }
 
         goal_verdicts = result.get("goal_verdicts", [])
@@ -1906,6 +1929,7 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
                     },
                     "verify_completion_history": prev_history,
                     "agent_task": None,
+                    "_verify_session_id": verify_session,
                 }
 
         new_result = {
@@ -1921,6 +1945,7 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
                 "verify_completion_result": new_result,
                 "verify_completion_history": prev_history,
                 "agent_task": None,
+                "_verify_session_id": verify_session,
             }
 
         if ratio >= 0.5:
@@ -1936,6 +1961,7 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
                     "verify_completion_result": new_result,
                     "verify_completion_history": prev_history,
                     "agent_task": None,
+                    "_verify_session_id": verify_session,
                 }
 
             new_result["verdict"] = "incomplete"
@@ -1955,6 +1981,7 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
                     f"Failed goals:\n{failed_summary}\n\n"
                     "Revise the research goals to address the unmet criteria."
                 ),
+                "_verify_session_id": verify_session,
             }
 
         # < 50% — fundamental rethink
@@ -1969,6 +1996,7 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
                 "verify_completion_result": new_result,
                 "verify_completion_history": prev_history,
                 "agent_task": None,
+                "_verify_session_id": verify_session,
             }
 
         new_result["verdict"] = "no_half"
@@ -1984,6 +2012,7 @@ def build_verify_completion_node(workspace_dir: str) -> Any:
                 "The current approach is not working. Brainstorm substantially "
                 "different approaches to the research question."
             ),
+            "_verify_session_id": verify_session,
         }
 
     verify_completion_node.__name__ = "verify_completion"

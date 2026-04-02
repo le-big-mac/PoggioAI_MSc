@@ -75,12 +75,17 @@ def _run_cli_agent(
     backend: str = "claude",
     model: Optional[str] = None,
     timeout: int = 1800,
+    session_id: Optional[str] = None,
+    resume: bool = False,
+    metadata: Optional[dict] = None,
 ) -> str:
     """Run a full CLI agent with tool use in the given workspace.
 
     Unlike cli_completion() (single-turn, no tools), this gives the agent
     file I/O, bash, and code execution capabilities so it can write code,
     run it, see errors, fix them, and iterate.
+
+    Supports session resume to keep context across sequential stages.
     """
     os.makedirs(workspace_dir, exist_ok=True)
 
@@ -90,16 +95,26 @@ def _run_cli_agent(
             cmd.extend(["--model", model])
         cmd.extend(["--allowedTools",
                      "Edit,Read,Write,Bash,Glob,Grep"])
+        if resume and session_id:
+            cmd.extend(["--resume", session_id])
+        elif session_id:
+            cmd.extend(["--session-id", session_id])
     elif backend == "codex":
-        cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
+        if resume and session_id:
+            cmd = ["codex", "exec", "resume", session_id,
+                   "--dangerously-bypass-approvals-and-sandbox"]
+        else:
+            cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
         if model:
-            cmd.extend(["--model", model])
+            cmd.extend(["-m", model])
     elif backend == "gemini":
         cmd = ["gemini", "--approval-mode", "yolo"]
         if model:
             cmd.extend(["--model", model])
+        if resume:
+            cmd.extend(["--resume", "latest"])
     else:
-        return f"[experiment_runner error: unknown backend {backend!r}]"
+        raise RuntimeError(f"Unknown backend {backend!r}")
 
     try:
         result = subprocess.run(
@@ -108,13 +123,20 @@ def _run_cli_agent(
             env=os.environ.copy(),
         )
     except subprocess.TimeoutExpired:
-        return f"[experiment stage timed out after {timeout}s]"
+        raise RuntimeError(f"Experiment stage timed out after {timeout}s")
     except FileNotFoundError:
-        return f"['{backend}' CLI tool not found on PATH]"
+        raise RuntimeError(f"'{backend}' CLI tool not found on PATH")
+
+    # Extract session ID from codex stderr
+    if backend == "codex" and metadata is not None and result.stderr:
+        from .cli_completion import extract_session_id
+        sid = extract_session_id(result.stderr)
+        if sid:
+            metadata["session_id"] = sid
 
     if result.returncode != 0:
         stderr = (result.stderr or "")[:1000]
-        return f"[experiment stage failed (rc={result.returncode}): {stderr}]"
+        raise RuntimeError(f"Experiment stage failed (rc={result.returncode}): {stderr}")
 
     return result.stdout.strip()
 
@@ -180,6 +202,8 @@ def run_experiment_stages(
     Returns:
         JSON string with aggregated results from all stages.
     """
+    import uuid as _uuid
+
     experiment_dir = os.path.join(workspace_dir, "experiment_workspace")
     os.makedirs(experiment_dir, exist_ok=True)
 
@@ -188,42 +212,45 @@ def run_experiment_stages(
     with open(idea_path, "w") as f:
         f.write(idea_spec)
 
-    prior_results = ""
+    session_id = str(_uuid.uuid4())
     stages_to_run = STAGES[:end_stage]
 
     for i, stage in enumerate(stages_to_run, 1):
         stage_dir = os.path.join(experiment_dir, f"experiment_{stage['name']}")
         os.makedirs(stage_dir, exist_ok=True)
 
-        # Copy results from previous stage into this stage's directory
-        if prior_results:
-            with open(os.path.join(stage_dir, "prior_results.json"), "w") as f:
-                f.write(prior_results)
+        is_first = (i == 1)
 
-        prompt = (
-            f"# Experiment Stage {i}/{len(stages_to_run)}: {stage['description']}\n\n"
-            f"## Research Idea\n{idea_spec}\n\n"
-            f"## Stage Instructions\n{stage['instructions']}\n\n"
-        )
-        if prior_results:
-            # Truncate prior results to avoid context overflow
-            prior_summary = prior_results[:5000]
-            if len(prior_results) > 5000:
-                prior_summary += "\n... (truncated, see prior_results.json for full data)"
-            prompt += f"## Results from Previous Stage(s)\n{prior_summary}\n\n"
-
+        prompt = f"# Experiment Stage {i}/{len(stages_to_run)}: {stage['description']}\n\n"
+        if is_first:
+            prompt += f"## Research Idea\n{idea_spec}\n\n"
+        prompt += f"## Stage Instructions\n{stage['instructions']}\n\n"
         prompt += (
-            "Work in the current directory. Write your code, run it, fix any errors, "
-            "and save final results to results.json. If you create plots, save them "
-            "to a plots/ subdirectory."
+            f"Work in the `experiment_{stage['name']}/` subdirectory. "
+            "Write your code, run it, fix any errors, and save final results "
+            f"to `experiment_{stage['name']}/results.json`. "
+            "If you create plots, save them to a `plots/` subdirectory within."
         )
+        if not is_first:
+            prompt += (
+                "\n\nYou have full context from previous stages in this session. "
+                "Build on your prior work — reference results and code from earlier stages."
+            )
 
         logger.info(
-            "[ExperimentRunner] Stage %d/%d: %s — backend=%s",
-            i, len(stages_to_run), stage["name"], backend,
+            "[ExperimentRunner] Stage %d/%d: %s — backend=%s resume=%s",
+            i, len(stages_to_run), stage["name"], backend, not is_first,
         )
         t0 = time.time()
-        output = _run_cli_agent(prompt, stage_dir, backend, model, timeout_per_stage)
+        meta: dict = {}
+        output = _run_cli_agent(
+            prompt, experiment_dir, backend, model, timeout_per_stage,
+            session_id=session_id, resume=not is_first, metadata=meta,
+        )
+        # Codex may assign a different session ID
+        if "session_id" in meta:
+            session_id = meta["session_id"]
+
         elapsed = time.time() - t0
         logger.info(
             "[ExperimentRunner] Stage %s completed in %.1fs — output_len=%d",
@@ -233,9 +260,6 @@ def run_experiment_stages(
         # Save the agent's full output for debugging
         with open(os.path.join(stage_dir, "agent_output.txt"), "w") as f:
             f.write(output)
-
-        # Read results for next stage
-        prior_results = _read_results(stage_dir)
 
         # Record to CLI budget tracker
         try:
